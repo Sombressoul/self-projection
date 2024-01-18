@@ -38,9 +38,9 @@ self_projection = SelfProjection(size_input=input_tensor.size()[1::], size_proje
 projected, relations = self_projection(input_tensor)
 
 print(projected.shape)
-# >>> torch.Size([2, 128, 128])
+# >>> torch.Size([<batch_size>, 128, 128])
 print(relations.shape)
-# >>> torch.Size([2, 128, 128])
+# >>> torch.Size([<batch_size>, 128, 128])
 ```
 
 ## Contribution
