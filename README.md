@@ -21,7 +21,7 @@ git clone https://github.com/Sombressoul/self-projection ./self_projection
 
 ## Usage
 
-Here's a simple example of how to use the `SelfProjection` module in a PyTorch model:
+Here's a simple example of how to use the `SelfProjection` with PyTorch:
 
 ```python
 import torch
