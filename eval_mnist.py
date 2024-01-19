@@ -108,7 +108,7 @@ def test(model, device, test_loader):
 
 def main():
     # Training settings
-    parser = argparse.ArgumentParser(description="PyTorch MNIST Example")
+    parser = argparse.ArgumentParser(description="SelfProjection MNIST evaluation")
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -235,7 +235,7 @@ def main():
         scheduler.step()
 
     if args.save_model:
-        torch.save(model.state_dict(), "mnist_cnn.pt")
+        torch.save(model.state_dict(), "model_mnist.pt")
 
 
 if __name__ == "__main__":
