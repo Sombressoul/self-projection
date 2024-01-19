@@ -7,7 +7,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
-from source import SelfProjection
+from self_projection import SelfProjection
 
 
 class Net(nn.Module):
