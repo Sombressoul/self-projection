@@ -3,3 +3,6 @@ __pycache__
 /.venv_test
 /.activate
 /data
+/build
+/dist
+/*.egg-info
