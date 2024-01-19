@@ -22,6 +22,14 @@ The `SelfProjection` module employs a dual projection mechanism to process input
 
 ## Installation
 
+__Using pip:__
+
+To install the `SelfProjection` module using pip, simply run the following command:
+
+```bash
+pip install self-projection
+```
+
 __From source:__
 
 To install the `SelfProjection` module, clone this repository and import the module into your PyTorch project.
