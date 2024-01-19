@@ -16,16 +16,23 @@ class Net(nn.Module):
     def __init__(
         self,
         p_size: int,
-        dropout_rate: float,
+        dropout_rate_i: float,
+        dropout_rate_p: float,
     ):
         super(Net, self).__init__()
 
+        print("Test-model parameters:")
+        print(f"Projection size: {p_size}")
+        print(f"Dropout rate input: {dropout_rate_i}")
+        print(f"Dropout rate projection: {dropout_rate_p}")
+
+        self.dropout_input = nn.Dropout(dropout_rate_i)
         self.self_projection = SelfProjection(
             size_input=(28, 28),
             size_projection=p_size,
         )
-        self.dropout = nn.Dropout(dropout_rate)
-        self.activation = nn.ReLU()
+        self.dropout_projection = nn.Dropout(dropout_rate_p)
+        self.activation = nn.Tanh()
         self.linear_consolidate = nn.Linear(p_size**2, p_size**2)
         self.linear_interpretate = nn.Linear(p_size**2, 10)
         self.log_softmax = nn.LogSoftmax(dim=1)
@@ -36,9 +43,10 @@ class Net(nn.Module):
         x: torch.Tensor,
     ):
         x = x.squeeze(1)
+        x = self.dropout_input(x)
         x = self.self_projection(x)[0]
         x = x.flatten(1)
-        x = self.dropout(x)
+        x = self.dropout_projection(x)
         x = self.activation(x)
         x = self.linear_consolidate(x)
         x = self.activation(x)
@@ -174,10 +182,16 @@ def main():
         help="SelfProjection size",
     )
     parser.add_argument(
-        "--dropout-rate",
+        "--dropout-rate-i",
+        type=float,
+        default=0.90,
+        help="Input dropout rate",
+    )
+    parser.add_argument(
+        "--dropout-rate-p",
         type=float,
         default=0.75,
-        help="Dropout rate",
+        help="Projection dropout rate",
     )
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -209,7 +223,8 @@ def main():
 
     model = Net(
         p_size=args.p_size,
-        dropout_rate=args.dropout_rate,
+        dropout_rate_i=args.dropout_rate_i,
+        dropout_rate_p=args.dropout_rate_p,
     ).to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
