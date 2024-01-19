@@ -68,7 +68,7 @@ print(relations.shape)
 
 The `SelfProjection` module has been comprehensively evaluated using the MNIST dataset under various controlled conditions. These evaluations aim to assess its spatial feature extraction efficiency and overall model performance.
 
-[eval_mnist.py](eval_mnist.py) - contains an evaluation code for MNIST dataset. By default it is set to extreme conditions with heavy projection reduction (4x4) and high dropout rate at projection level (0.75) and extreme dropout rate at input level (0.9).
+[eval_mnist.py](eval_mnist.py) - contains an evaluation code for MNIST dataset. By default it is set to extreme conditions with heavy projection reduction (4x4), high dropout rate at projection level (0.75) and extreme dropout rate at input level (0.9).
 
 ### Experimental Setup and Results
 
