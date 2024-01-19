@@ -5,8 +5,9 @@
   - [Installation](#installation)
   - [Usage](#usage)
   - [Evaluation](#evaluation)
-    - [Experimental Setup](#experimental-setup)
+    - [Experimental Setup and Results](#experimental-setup-and-results)
     - [Insights](#insights)
+    - [Future Directions](#future-directions)
   - [Contribution](#contribution)
 
 ## Overview
@@ -65,23 +66,51 @@ print(relations.shape)
 
 ## Evaluation
 
-The `SelfProjection` module has been evaluated using the MNIST dataset under various conditions to test its efficiency in spatial feature extraction and overall performance. 
+The `SelfProjection` module has been comprehensively evaluated using the MNIST dataset under various controlled conditions. These evaluations aim to assess its spatial feature extraction efficiency and overall model performance.
 
-[eval_mnist.py](eval_mnist.py) - contains an evaluation code for MNIST dataset. By default it is set to extreme conditions with heavy projection reduction (4x4) and high dropout rate (0.75).
+[eval_mnist.py](eval_mnist.py) - contains an evaluation code for MNIST dataset. By default it is set to extreme conditions with heavy projection reduction (4x4), high dropout rate at projection level (0.75) and extreme dropout rate at input level (0.9).
 
-### Experimental Setup
-Two key experimental setups were employed:
+### Experimental Setup and Results
 
-1. **Heavy Reduction with High Dropout**:
-   - Initial tests with a projection size of 4x4 and a high dropout rate of 0.75 demonstrated the module's capability to still achieve an accuracy of 53% on the MNIST test set. This setup was particularly challenging due to the substantial dimensionality reduction and high dropout rate, putting a stress test on the feature extraction abilities of `SelfProjection`.
+Three distinct experimental setups were employed, each with specific configurations of projection size and dropout rates:
 
-2. **Standard Conditions**:
-   - Further evaluation under more conventional conditions, with a projection size increased to 8x8 and a moderate dropout rate of 0.25, showed a significant improvement. The model achieved a 95% accuracy on the MNIST test set, aligning well with standard benchmarks. This result highlights the effectiveness of the `SelfProjection` module when integrated into a neural network architecture under typical operating conditions.
+1. **Standard Conditions**:
+   - **Configuration**: Projection size of 8x8, input dropout rate of 0.0, and projection dropout rate of 0.25.
+   - **Command**:
+    ```bash
+    python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
+    ```
+   - **Results**: Achieved an average loss of 0.1484 and an accuracy of 95% (9544/10000) on the test set.
+   - **Analysis**: This performance under standard conditions demonstrates the module's effectiveness in capturing essential features necessary for high accuracy in digit classification.
+
+2. **Heavy Reduction with High Dropout**:
+   - **Configuration**: Projection size of 4x4, input dropout rate of 0.0, and projection dropout rate of 0.75.
+   - **Command**:
+    ```bash
+    python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
+    ```
+   - **Results**: Achieved an average loss of 0.7027 and an accuracy of 79% (7919/10000) on the test set.
+   - **Analysis**: The model shows resilience and robust feature extraction capability even with substantial dimensionality reduction and high dropout, though with a noticeable decrease in accuracy compared to the standard setup.
+
+3. **Heavy Reduction with High Dropout of Projection and Extreme Dropout of Input**:
+   - **Configuration**: Projection size of 4x4, input dropout rate of 0.9, and projection dropout rate of 0.75.
+   - **Command**:
+    ```bash
+    python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
+    ```
+   - **Results**: Achieved an average loss of 1.1053 and an accuracy of 69% (6868/10000) on the test set.
+   - **Analysis**: Under these extreme conditions, the model still performs significantly above chance level, indicating the `SelfProjection` module's ability to extract meaningful features from highly sparse data, albeit with a reduction in overall performance.
+
 
 ### Insights
-These evaluations indicate that the `SelfProjection` module is capable of extracting meaningful and robust features from the input data, even under stringent constraints. The improvement in performance with larger projection size and lower dropout rate suggests the module's potential in various application scenarios, especially in tasks requiring sophisticated data representation and processing.
 
-Further experiments, including comparisons with baseline models and testing on more complex datasets, are planned to continue exploring the capabilities and optimizing the performance of the `SelfProjection` module.
+These varied evaluations illustrate the `SelfProjection` module's capability to adapt and extract meaningful features across a range of scenarios. The results under different projection sizes and dropout rates provide valuable insights into the module's potential applicability in tasks requiring nuanced data representation and processing. The module demonstrates robustness in feature extraction, especially notable under the heavy reduction and high dropout conditions.
+
+### Future Directions
+
+The ongoing development of the `SelfProjection` module is a component of a personal endeavor in the field of machine learning. Future plans include conducting experiments with more complex datasets to further assess and refine the module's capabilities. These steps are aimed at exploring a broader range of applications and enhancing the module's performance in diverse settings.
+
+This module is a reflection of my interest in contributing to the machine learning community through individual efforts and is one aspect of a larger personal project dedicated to exploring innovative approaches in the field.
 
 ## Contribution
 
