@@ -22,10 +22,13 @@ The `SelfProjection` module employs a dual projection mechanism to process input
 
 ## Installation
 
+__From source:__
+
 To install the `SelfProjection` module, clone this repository and import the module into your PyTorch project.
 
 ```bash
 git clone https://github.com/Sombressoul/self-projection ./self_projection
+python -m pip install -e ./self_projection
 ```
 
 ## Usage
