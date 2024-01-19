@@ -1,13 +1,18 @@
 #!/usr/bin/env python
 from distutils.core import setup
 
+from pathlib import Path
+
 __VERSION__ = "0.1.0"
+
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="self-projection",
     version=__VERSION__,
     description="SelfProjection is a PyTorch-based neural network layer designed to transform and project high-dimensional data.",
-    long_description=open('README.md').read(),
+    long_description=long_description,
     long_description_content_type='text/markdown',
     author="Konstantin Bashinskiy",
     author_email="sombressoul@gmail.com",
