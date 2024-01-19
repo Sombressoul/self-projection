@@ -7,6 +7,8 @@ setup(
     name="self-projection",
     version=__VERSION__,
     description="SelfProjection is a PyTorch-based neural network layer designed to transform and project high-dimensional data.",
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     author="Konstantin Bashinskiy",
     author_email="sombressoul@gmail.com",
     keywords=["machine learning", "deep learning", "pytorch layers", "pytorch modules"],
