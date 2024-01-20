@@ -10,9 +10,37 @@ from torch.optim.lr_scheduler import StepLR
 from self_projection import SelfProjection
 
 
+# Experimental model.
+class ExperimentalModel(nn.Module):
+    def __init__(
+        self,
+    ):
+        super(ExperimentalModel, self).__init__()
+        self.self_projection = SelfProjection(
+            size_input=(96, 32),
+            size_projection=16,
+        )
+        self.activation = nn.ReLU()
+        self.fc = nn.Linear(16**2, 100)
+        self.log_softmax = nn.LogSoftmax(dim=1)
+        pass
+
+    def forward(
+        self,
+        x: torch.Tensor,
+    ):
+        x = x.view([-1, 96, 32])
+        x = self.self_projection(x)[0]
+        x = self.activation(x)
+        x = x.flatten(1)
+        x = self.fc(x)
+        x = self.log_softmax(x)
+        return x
+
+
 # Model for evaluation: SelfProjection
 # python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0
-# Total number of trainable parameters: 31844
+# Total number of trainable parameters: 31332
 # Test set: Average loss: 3.0645, Accuracy: 2673/10000 (27%)
 class NetSP(nn.Module):
     def __init__(
@@ -202,7 +230,7 @@ def main():
         "--model",
         type=int,
         default=0,
-        help="model type: 0 - SP, 1 - CNN (default: 0)",
+        help="model type: 0 - SP, 1 - CNN, -1 - experimental (default: 0)",
     )
     parser.add_argument(
         "--save-model",
@@ -242,6 +270,8 @@ def main():
         model = NetSP().to(device)
     elif args.model == 1:
         model = NetCNN().to(device)
+    elif args.model == -1:
+        model = ExperimentalModel().to(device)
     else:
         raise "Unknown model type."
 
