@@ -137,7 +137,7 @@ class SelfProjection(nn.Module):
 
         # Self-project.
         relations = torch.einsum("ij,ik->ijk", original_sum, permuted_sum)
-        projected = original_yy.mul(relations) @ permuted_yy.mul(relations)
+        projected = original_yy.add(permuted_yy.permute([0, -1, -2])).mul(relations)
         projected = self._normalize(
             x=projected,
             dims=[-1, -2],
