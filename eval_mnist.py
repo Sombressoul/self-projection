@@ -14,17 +14,17 @@ from self_projection import SelfProjection
 # Standard Conditions:
 # python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
 # Results:
-# Test set: Average loss: 0.1375, Accuracy: 9572/10000 (96%)
+# Test set: Average loss: 0.1357, Accuracy: 9584/10000 (96%)
 #
 # Heavy Reduction with High Dropout:
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
 # Results:
-# Test set: Average loss: 0.7143, Accuracy: 7796/10000 (78%)
+# Test set: Average loss: 0.6236, Accuracy: 8175/10000 (82%)
 #
 # Heavy Reduction with High Dropout of Projection and Extreme Dropout of Input:
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
 # Results:
-# Test set: Average loss: 1.0713, Accuracy: 7078/10000 (71%)
+# Test set: Average loss: 1.0705, Accuracy: 6985/10000 (70%)
 
 
 class Net(nn.Module):
@@ -62,9 +62,9 @@ class Net(nn.Module):
         x = x.squeeze(1)
         x = self.dropout_input(x)
         x = self.self_projection(x)[0]
-        x = x.flatten(1)
-        x = self.dropout_projection(x)
         x = self.activation(x)
+        x = self.dropout_projection(x)
+        x = x.flatten(1)
         x = self.linear_consolidate(x)
         x = self.activation(x)
         x = self.linear_interpretate(x)

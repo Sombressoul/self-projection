@@ -12,8 +12,8 @@ from self_projection import SelfProjection
 
 # Model for evaluation: SelfProjection
 # python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0
-# Total number of trainable parameters: 31396
-# Test set: Average loss: 3.1738, Accuracy: 2479/10000 (25%)
+# Total number of trainable parameters: 31844
+# Test set: Average loss: 3.1760, Accuracy: 2550/10000 (26%)
 class NetSP(nn.Module):
     def __init__(
         self,
@@ -23,7 +23,7 @@ class NetSP(nn.Module):
             size_input=(96, 32),
             size_projection=16,
         )
-        self.relu = nn.ReLU()
+        self.activation = nn.ReLU()
         self.fc = nn.Linear(16**2, 100)
         self.log_softmax = nn.LogSoftmax(dim=1)
         pass
@@ -34,7 +34,7 @@ class NetSP(nn.Module):
     ):
         x = x.view([-1, 96, 32])
         x = self.self_projection(x)[0]
-        x = self.relu(x)
+        x = self.activation(x)
         x = x.flatten(1)
         x = self.fc(x)
         x = self.log_softmax(x)
