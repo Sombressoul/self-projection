@@ -86,6 +86,18 @@ class SelfProjection(nn.Module):
         y = (x - mean) / (std + self.eps)
         norm = gamma * y + beta
         return norm
+    
+    def _extract(
+        self,
+        x: torch.FloatTensor,
+        mat_xj: nn.Parameter,
+        mat_xi: nn.Parameter,
+    ) -> tuple[torch.FloatTensor]:
+        x = x @ mat_xj
+        x_sum = x.sum(dim=-2)
+        x = x.permute([0, -1, -2]) @ mat_xi
+        x = x.permute([0, -1, -2])
+        return x, x_sum
 
     def forward(
         self,
@@ -96,10 +108,11 @@ class SelfProjection(nn.Module):
         permuted = x.permute([0, -1, -2])
 
         # Original projection.
-        original_yy = original @ self.original_xj_y
-        original_sum = original_yy.sum(dim=-2)
-        original_yy = original_yy.permute([0, -1, -2]) @ self.original_xi_y
-        original_yy = original_yy.permute([0, -1, -2])
+        original_yy, original_sum = self._extract(
+            x=original,
+            mat_xj=self.original_xj_y,
+            mat_xi=self.original_xi_y,
+        )
         original_yy = self._normalize(
             x=original_yy,
             dims=[-1, -2],
@@ -108,10 +121,11 @@ class SelfProjection(nn.Module):
         )
 
         # Permuted projection.
-        permuted_yy = permuted @ self.permuted_xj_y
-        permuted_sum = permuted_yy.sum(dim=-2)
-        permuted_yy = permuted_yy.permute([0, -1, -2]) @ self.permuted_xi_y
-        permuted_yy = permuted_yy.permute([0, -1, -2])
+        permuted_yy, permuted_sum = self._extract(
+            x=permuted,
+            mat_xj=self.permuted_xj_y,
+            mat_xi=self.permuted_xi_y,
+        )
         permuted_yy = self._normalize(
             x=permuted_yy,
             dims=[-1, -2],
@@ -128,7 +142,8 @@ class SelfProjection(nn.Module):
             beta=self.beta_r,
         )
         relations = relations.add(1.0)
-        projected = original_yy.add(permuted_yy.permute([0, -1, -2])).mul(relations)
+        projected = original_yy.add(permuted_yy.permute([0, -1, -2]))
+        projected = projected.mul(relations)
         projected = self._normalize(
             x=projected,
             dims=[-1, -2],
