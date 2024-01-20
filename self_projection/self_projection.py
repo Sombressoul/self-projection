@@ -45,16 +45,14 @@ class SelfProjection(nn.Module):
         self.eps = eps
 
         # Define trainable parameters: normalizations.
-        self.gamma_o_sum = nn.Parameter(torch.ones([size_projection]))
         self.gamma_o = nn.Parameter(torch.ones([size_projection, size_projection]))
-        self.gamma_p_sum = nn.Parameter(torch.ones([size_projection]))
         self.gamma_p = nn.Parameter(torch.ones([size_projection, size_projection]))
+        self.gamma_r = nn.Parameter(torch.ones([size_projection, size_projection]))
         self.gamma = nn.Parameter(torch.ones([size_projection, size_projection]))
 
-        self.beta_o_sum = nn.Parameter(torch.zeros([size_projection]))
         self.beta_o = nn.Parameter(torch.zeros([size_projection, size_projection]))
-        self.beta_p_sum = nn.Parameter(torch.zeros([size_projection]))
         self.beta_p = nn.Parameter(torch.zeros([size_projection, size_projection]))
+        self.beta_r = nn.Parameter(torch.zeros([size_projection, size_projection]))
         self.beta = nn.Parameter(torch.zeros([size_projection, size_projection]))
 
         # Define trainable parameters: permutations.
@@ -100,13 +98,6 @@ class SelfProjection(nn.Module):
         # Original projection.
         original_yy = original @ self.original_xj_y
         original_sum = original_yy.sum(dim=-2)
-        original_sum = self._normalize(
-            x=original_sum,
-            dims=[-1],
-            gamma=self.gamma_o_sum,
-            beta=self.beta_o_sum,
-        )
-        original_sum = original_sum.add(1.0)
         original_yy = original_yy.permute([0, -1, -2]) @ self.original_xi_y
         original_yy = original_yy.permute([0, -1, -2])
         original_yy = self._normalize(
@@ -119,13 +110,6 @@ class SelfProjection(nn.Module):
         # Permuted projection.
         permuted_yy = permuted @ self.permuted_xj_y
         permuted_sum = permuted_yy.sum(dim=-2)
-        permuted_sum = self._normalize(
-            x=permuted_sum,
-            dims=[-1],
-            gamma=self.gamma_p_sum,
-            beta=self.beta_p_sum,
-        )
-        permuted_sum = permuted_sum.add(1.0)
         permuted_yy = permuted_yy.permute([0, -1, -2]) @ self.permuted_xi_y
         permuted_yy = permuted_yy.permute([0, -1, -2])
         permuted_yy = self._normalize(
@@ -137,6 +121,13 @@ class SelfProjection(nn.Module):
 
         # Self-project.
         relations = torch.einsum("ij,ik->ijk", original_sum, permuted_sum)
+        relations = self._normalize(
+            x=relations,
+            dims=[-1, -2],
+            gamma=self.gamma_r,
+            beta=self.beta_r,
+        )
+        relations = relations.add(1.0)
         projected = original_yy.add(permuted_yy.permute([0, -1, -2])).mul(relations)
         projected = self._normalize(
             x=projected,
