@@ -14,17 +14,17 @@ from self_projection import SelfProjection
 # Standard Conditions:
 # python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
 # Results:
-# Test set: Average loss: 0.1357, Accuracy: 9584/10000 (96%)
+# Test set: Average loss: 0.1306, Accuracy: 9598/10000 (96%)
 #
 # Heavy Reduction with High Dropout:
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
 # Results:
-# Test set: Average loss: 0.6236, Accuracy: 8175/10000 (82%)
+# Test set: Average loss: 0.6192, Accuracy: 8230/10000 (82%)
 #
 # Heavy Reduction with High Dropout of Projection and Extreme Dropout of Input:
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
 # Results:
-# Test set: Average loss: 1.0705, Accuracy: 6985/10000 (70%)
+# Test set: Average loss: 1.0966, Accuracy: 7212/10000 (72%)
 
 
 class Net(nn.Module):

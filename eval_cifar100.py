@@ -13,7 +13,7 @@ from self_projection import SelfProjection
 # Model for evaluation: SelfProjection
 # python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0
 # Total number of trainable parameters: 31844
-# Test set: Average loss: 3.1760, Accuracy: 2550/10000 (26%)
+# Test set: Average loss: 3.0645, Accuracy: 2673/10000 (27%)
 class NetSP(nn.Module):
     def __init__(
         self,
