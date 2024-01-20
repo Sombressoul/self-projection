@@ -5,7 +5,7 @@
   - [Installation](#installation)
   - [Usage](#usage)
   - [Evaluation](#evaluation)
-    - [Experimental Setup and Results](#experimental-setup-and-results)
+    - [Experimental Setup and Results (outdated since 20.01.2024)](#experimental-setup-and-results-outdated-since-20012024)
     - [Insights](#insights)
     - [Future Directions](#future-directions)
   - [Contribution](#contribution)
@@ -70,7 +70,7 @@ The `SelfProjection` module has been comprehensively evaluated using the MNIST d
 
 [eval_mnist.py](eval_mnist.py) - contains an evaluation code for MNIST dataset. By default it is set to extreme conditions with heavy projection reduction (4x4), high dropout rate at projection level (0.75) and extreme dropout rate at input level (0.9).
 
-### Experimental Setup and Results
+### Experimental Setup and Results (outdated since 20.01.2024)
 
 Three distinct experimental setups were employed, each with specific configurations of projection size and dropout rates:
 
