@@ -50,12 +50,10 @@ class SelfProjection(nn.Module):
         # Define trainable parameters: normalizations.
         self.gamma_o = nn.Parameter(torch.ones([size_projection, size_projection]))
         self.gamma_p = nn.Parameter(torch.ones([size_projection, size_projection]))
-        self.gamma_r = nn.Parameter(torch.ones([size_projection, size_projection]))
         self.gamma = nn.Parameter(torch.ones([size_projection, size_projection]))
 
         self.beta_o = nn.Parameter(torch.zeros([size_projection, size_projection]))
         self.beta_p = nn.Parameter(torch.zeros([size_projection, size_projection]))
-        self.beta_r = nn.Parameter(torch.zeros([size_projection, size_projection]))
         self.beta = nn.Parameter(torch.zeros([size_projection, size_projection]))
 
         # Define trainable parameters: permutations.
@@ -150,13 +148,8 @@ class SelfProjection(nn.Module):
 
         # Self-project.
         relations = torch.einsum("ij,ik->ijk", original_sum, permuted_sum)
-        relations = self._normalize(
-            x=relations,
-            dims=[-1, -2],
-            gamma=self.gamma_r,
-            beta=self.beta_r,
-        )
-        relations = relations.add(1.0)
+        relations = relations.sub(relations.min()).add(self.eps).log()
+        relations = torch.nn.functional.softmax(relations, dim=-1)
         projected = original_yy.add(permuted_yy.permute([0, -1, -2]))
         projected = projected.mul(relations)
         projected = self._normalize(
