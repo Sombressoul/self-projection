@@ -11,14 +11,10 @@ class SelfProjection(nn.Module):
     eps: float
 
     # Normalizations params.
-    gamma_o_sum: nn.Parameter
     gamma_o: nn.Parameter
-    gamma_p_sum: nn.Parameter
     gamma_p: nn.Parameter
     gamma: nn.Parameter
-    beta_o_sum: nn.Parameter
     beta_o: nn.Parameter
-    beta_p_sum: nn.Parameter
     beta_p: nn.Parameter
     beta: nn.Parameter
 
@@ -86,7 +82,7 @@ class SelfProjection(nn.Module):
         y = (x - mean) / (std + self.eps)
         norm = gamma * y + beta
         return norm
-    
+
     def _extract(
         self,
         x: torch.FloatTensor,
