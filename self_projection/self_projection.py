@@ -47,7 +47,7 @@ class SelfProjection(nn.Module):
         )
         self.eps = eps
 
-        # Define trainable parameters: normalizations.
+        # Define trainable parameters: normalization scale & bias.
         self.gamma_o = nn.Parameter(torch.ones([size_projection, size_projection]))
         self.gamma_p = nn.Parameter(torch.ones([size_projection, size_projection]))
         self.gamma = nn.Parameter(torch.ones([size_projection, size_projection]))
@@ -56,7 +56,7 @@ class SelfProjection(nn.Module):
         self.beta_p = nn.Parameter(torch.zeros([size_projection, size_projection]))
         self.beta = nn.Parameter(torch.zeros([size_projection, size_projection]))
 
-        # Define trainable parameters: permutations.
+        # Define trainable parameters: permutation matrices.
         original_xj_y = torch.empty([self.size_input[1], self.size_projection])
         original_xj_y = self._initialize(original_xj_y)
         self.original_xj_y = nn.Parameter(original_xj_y)
