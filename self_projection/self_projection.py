@@ -3,12 +3,15 @@ import torch.nn as nn
 
 
 from typing import Union
+from collections.abc import Callable
 
 
 class SelfProjection(nn.Module):
+    # Configurable params.
     size_input: Union[torch.Size, list[int]]
     size_projection: int
     eps: float
+    initializer: Callable[[torch.Tensor], torch.Tensor]
 
     # Normalizations params.
     gamma_o: nn.Parameter
@@ -28,16 +31,20 @@ class SelfProjection(nn.Module):
         self,
         size_input: Union[torch.Size, list[int]],
         size_projection: int,
+        initializer: Callable[[torch.Tensor], torch.Tensor] = None,
         eps: float = 1e-5,
         **kwargs,
     ) -> None:
         super(SelfProjection, self).__init__(**kwargs)
 
-        # Define internal variables.
+        # Define configurable parameters.
         self.size_input = (
             size_input if isinstance(size_input, torch.Size) else torch.Size(size_input)
         )
         self.size_projection = size_projection
+        self.initializer = (
+            initializer if initializer is not None else self._default_initializer
+        )
         self.eps = eps
 
         # Define trainable parameters: normalizations.
@@ -53,22 +60,34 @@ class SelfProjection(nn.Module):
 
         # Define trainable parameters: permutations.
         original_xj_y = torch.empty([self.size_input[1], self.size_projection])
-        original_xj_y = nn.init.xavier_uniform_(original_xj_y)
+        original_xj_y = self._initialize(original_xj_y)
         self.original_xj_y = nn.Parameter(original_xj_y)
 
         original_xi_y = torch.empty([self.size_input[0], self.size_projection])
-        original_xi_y = nn.init.xavier_uniform_(original_xi_y)
+        original_xi_y = self._initialize(original_xi_y)
         self.original_xi_y = nn.Parameter(original_xi_y)
 
         permuted_xj_y = torch.empty([self.size_input[0], self.size_projection])
-        permuted_xj_y = nn.init.xavier_uniform_(permuted_xj_y)
+        permuted_xj_y = self._initialize(permuted_xj_y)
         self.permuted_xj_y = nn.Parameter(permuted_xj_y)
 
         permuted_xi_y = torch.empty([self.size_input[1], self.size_projection])
-        permuted_xi_y = nn.init.xavier_uniform_(permuted_xi_y)
+        permuted_xi_y = self._initialize(permuted_xi_y)
         self.permuted_xi_y = nn.Parameter(permuted_xi_y)
 
         pass
+
+    def _default_initializer(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        return nn.init.xavier_uniform_(x, gain=nn.init.calculate_gain("relu"))
+
+    def _initialize(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        return self.initializer(x)
 
     def _normalize(
         self,
