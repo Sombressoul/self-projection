@@ -14,17 +14,17 @@ from self_projection import SelfProjection
 # Standard Conditions:
 # python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 0.1160, Accuracy: 9624/10000 (96%)
+# Test set: Average loss: 0.0814, Accuracy: 9755/10000 (98%)
 #
 # Heavy Reduction with High Dropout:
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 0.4368, Accuracy: 8854/10000 (89%)
+# Test set: Average loss: 0.3851, Accuracy: 8988/10000 (90%)
 #
 # Heavy Reduction with High Dropout of Projection and Extreme Dropout of Input:
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 0.9753, Accuracy: 7386/10000 (74%)
+# Test set: Average loss: 1.0016, Accuracy: 7017/10000 (70%)
 #
 # Total number of trainable parameters: 6090
 
