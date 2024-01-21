@@ -16,8 +16,12 @@ class ExperimentalModel(nn.Module):
         self,
     ):
         super(ExperimentalModel, self).__init__()
-        self.self_projection = SelfProjection(
+        self.self_projection_a = SelfProjection(
             size_input=(96, 32),
+            size_projection=32,
+        )
+        self.self_projection_b = SelfProjection(
+            size_input=(32, 32),
             size_projection=16,
         )
         self.activation = nn.ReLU()
@@ -30,7 +34,9 @@ class ExperimentalModel(nn.Module):
         x: torch.Tensor,
     ):
         x = x.view([-1, 96, 32])
-        x = self.self_projection(x)[0]
+        x = self.self_projection_a(x)[0]
+        x = self.activation(x)
+        x = self.self_projection_b(x)[0]
         x = self.activation(x)
         x = x.flatten(1)
         x = self.fc(x)
