@@ -1,6 +1,7 @@
+import math
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 
 from typing import Union
 from collections.abc import Callable
@@ -12,7 +13,9 @@ class SelfProjection(nn.Module):
     size_projection: int
     depth: int
     eps: float
+    delta: float
     initializer: Callable[[torch.Tensor], torch.Tensor]
+    activation: Callable[[torch.Tensor], torch.Tensor]
 
     # Normalizations params.
     gamma_o: nn.Parameter
@@ -34,7 +37,9 @@ class SelfProjection(nn.Module):
         size_projection: int,
         depth: int = 1,
         initializer: Callable[[torch.Tensor], torch.Tensor] = None,
+        activation: Callable[[torch.Tensor], torch.Tensor] = None,
         eps: float = 1e-5,
+        delta: float = 5.0e-2,
         **kwargs,
     ) -> None:
         super(SelfProjection, self).__init__(**kwargs)
@@ -48,7 +53,11 @@ class SelfProjection(nn.Module):
         self.initializer = (
             initializer if initializer is not None else self._default_initializer
         )
+        self.activation = (
+            activation if activation is not None else self._default_activation
+        )
         self.eps = eps
+        self.delta = delta
 
         # Define trainable parameters: normalization scale & bias.
         self.gamma_o = nn.Parameter(torch.ones([size_projection, size_projection]))
@@ -60,19 +69,43 @@ class SelfProjection(nn.Module):
         self.beta = nn.Parameter(torch.zeros([size_projection, size_projection]))
 
         # Define trainable parameters: permutation matrices.
-        original_xj_y = torch.empty([depth, self.size_input[1], self.size_projection])
+        original_xj_y = torch.empty(
+            [
+                self.depth,
+                self.size_input[1],
+                self.size_projection,
+            ]
+        )
         original_xj_y = self._initialize(original_xj_y)
         self.original_xj_y = nn.Parameter(original_xj_y)
 
-        original_xi_y = torch.empty([depth, self.size_input[0], self.size_projection])
+        original_xi_y = torch.empty(
+            [
+                self.depth,
+                self.size_input[0],
+                self.size_projection,
+            ]
+        )
         original_xi_y = self._initialize(original_xi_y)
         self.original_xi_y = nn.Parameter(original_xi_y)
 
-        permuted_xj_y = torch.empty([depth, self.size_input[0], self.size_projection])
+        permuted_xj_y = torch.empty(
+            [
+                self.depth,
+                self.size_input[0],
+                self.size_projection,
+            ]
+        )
         permuted_xj_y = self._initialize(permuted_xj_y)
         self.permuted_xj_y = nn.Parameter(permuted_xj_y)
 
-        permuted_xi_y = torch.empty([depth, self.size_input[1], self.size_projection])
+        permuted_xi_y = torch.empty(
+            [
+                self.depth,
+                self.size_input[1],
+                self.size_projection,
+            ]
+        )
         permuted_xi_y = self._initialize(permuted_xi_y)
         self.permuted_xi_y = nn.Parameter(permuted_xi_y)
 
@@ -83,6 +116,10 @@ class SelfProjection(nn.Module):
         accumulator_permuted = torch.zeros([self.size_projection, self.size_projection])
         self.accumulator_permuted = nn.Parameter(accumulator_permuted)
 
+        # Init submodules.
+        p = 1.0 - math.exp(-math.fabs(self.delta) * (self.depth - 1))
+        self.dropout = nn.Dropout(p=p)
+
         pass
 
     def _default_initializer(
@@ -90,6 +127,12 @@ class SelfProjection(nn.Module):
         x: torch.Tensor,
     ) -> torch.Tensor:
         return nn.init.xavier_uniform_(x, gain=nn.init.calculate_gain("relu"))
+
+    def _default_activation(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        return F.tanh(x)
 
     def _initialize(
         self,
@@ -117,16 +160,20 @@ class SelfProjection(nn.Module):
         mat_xi: nn.Parameter,
         accumulator: nn.Parameter,
     ) -> tuple[torch.FloatTensor]:
-        x_sum = torch.zeros([x.shape[0], self.size_projection])
-        x_sum = x_sum.to(device=x.device, dtype=x.dtype)
         for depth in range(self.depth):
-            x_buf = x @ mat_xj[depth]
-            x_sum = x_sum + x_buf.sum(dim=-2)
+            x_buf = x.clone()
+            x_buf = self.dropout(x_buf)
+            x_buf = x_buf @ mat_xj[depth]
+            x_sum = x_buf.sum(dim=-2)
+            x_sum = x_sum.sub(x_sum.min()).add(self.eps).log()
+            x_sum = F.softmax(x_sum, dim=-1).unsqueeze(-1)
             x_buf = x_buf.permute([0, -1, -2]) @ mat_xi[depth]
             x_buf = x_buf.permute([0, -1, -2])
+            x_buf = self.activation(x_buf)
+            x_buf = x_buf.mul(x_sum)
             accumulator = accumulator.add(x_buf)
         x = accumulator
-        return x, x_sum
+        return x
 
     def forward(
         self,
@@ -137,7 +184,7 @@ class SelfProjection(nn.Module):
         permuted = x.permute([0, -1, -2])
 
         # Original projection.
-        original_yy, original_sum = self._extract(
+        original_yy = self._extract(
             x=original,
             mat_xj=self.original_xj_y,
             mat_xi=self.original_xi_y,
@@ -151,7 +198,7 @@ class SelfProjection(nn.Module):
         )
 
         # Permuted projection.
-        permuted_yy, permuted_sum = self._extract(
+        permuted_yy = self._extract(
             x=permuted,
             mat_xj=self.permuted_xj_y,
             mat_xi=self.permuted_xi_y,
@@ -165,11 +212,7 @@ class SelfProjection(nn.Module):
         )
 
         # Self-project.
-        relations = torch.einsum("ij,ik->ijk", original_sum, permuted_sum)
-        relations = relations.sub(relations.min()).add(self.eps).log()
-        relations = torch.nn.functional.softmax(relations, dim=-1)
         projected = original_yy.add(permuted_yy.permute([0, -1, -2]))
-        projected = projected.mul(relations)
         projected = self._normalize(
             x=projected,
             dims=[-1, -2],
@@ -177,4 +220,4 @@ class SelfProjection(nn.Module):
             beta=self.beta,
         )
 
-        return projected, relations
+        return projected
