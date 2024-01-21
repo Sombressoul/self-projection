@@ -16,13 +16,14 @@ from self_projection import SelfProjection
 torch.manual_seed(42)
 
 # AE params
-self_projection_depth = 8
-epochs = 100
+self_projection_depth = 16
+epochs = 1000
 folder_path = "data/ae_test_5k"
 batch_size = 32
-dropout_rate = 0.25
-log_nth_epoch = 1
+dropout_rate = 0.0
+log_nth_epoch = 10
 log_image_idx = 0
+save_nth_epoch = 10
 
 
 class Net(nn.Module):
@@ -70,31 +71,32 @@ class Net(nn.Module):
             depth=depth,
         )
         self.dropout = nn.Dropout(dropout_rate)
-        self.activation = nn.ReLU()
+        self.activation = nn.Identity()
         pass
 
     def forward(
         self,
         x: torch.Tensor,
     ):
-        x = self.layer_norm_input(x)
-        x = self.self_projection_encode_a(x)[0]
+        # x = self.layer_norm_input(x)
+        x = self.self_projection_encode_a(x)
         x = self.activation(x)
         x = self.layer_norm_encode_a(x)
-        x = self.self_projection_encode_b(x)[0]
+        x = self.self_projection_encode_b(x)
         x = self.activation(x)
         x = self.layer_norm_encode_b(x)
-        x = self.self_projection_encode_c(x)[0]
+        x = self.self_projection_encode_c(x)
         x = self.activation(x)
         x = self.layer_norm_encode_c(x)
         latents = x.clone()
-        x = self.self_projection_decode_c(x)[0]
+        x = self.dropout(x)
+        x = self.self_projection_decode_c(x)
         x = self.activation(x)
         x = self.layer_norm_decode_c(x)
-        x = self.self_projection_decode_b(x)[0]
+        x = self.self_projection_decode_b(x)
         x = self.activation(x)
         x = self.layer_norm_decode_b(x)
-        x = self.self_projection_decode_a(x)[0]
+        x = self.self_projection_decode_a(x)
         return x, latents
 
 
@@ -102,22 +104,19 @@ def train(model, optimizer, tensor_images, epochs):
     global log_nth_epoch, log_image_idx
     loss_data = []
     for epoch in tqdm.tqdm(range(int(epochs))):
-        # batch_size
         idxs = torch.randperm(tensor_images.shape[0])
         tensor_images = tensor_images[idxs]
 
         running_loss = 0.0
 
-        # inner tqdm
         for i in tqdm.tqdm(range(0, tensor_images.shape[0], batch_size)):
-            # for i in range(0, tensor_images.shape[0], batch_size):
             optimizer.zero_grad()
             batch = tensor_images[i : i + batch_size]
             matrices_output, latents = model(batch)
 
-            loss = F.mse_loss(matrices_output, batch)
+            # loss = F.mse_loss(matrices_output, batch)
 
-            # loss = F.huber_loss(matrices_output, batch, reduction="mean", delta=0.75)
+            loss = F.huber_loss(matrices_output, batch, reduction="mean", delta=1.0)
 
             # x = F.log_softmax(matrices_output, dim=-2)
             # y = F.log_softmax(batch, dim=-2)
@@ -145,6 +144,9 @@ def train(model, optimizer, tensor_images, epochs):
             combined_image.save(f"temp/epoch_{str(epoch)}.png")
             # print(f"epoch {epoch} loss {running_loss}")
             loss_data.append(running_loss)
+        
+        if epoch % save_nth_epoch == 0:
+            torch.save(model.state_dict(), f"temp/model_epoch_{str(epoch)}.pth")
 
     plt.plot(loss_data)
     plt.show()
@@ -197,7 +199,7 @@ input_size = tensor_images.shape[1]
 model = Net(input_size, self_projection_depth, dropout_rate).to("cuda")
 optimizer = MADGRAD(
     model.parameters(),
-    lr=1.0e-3,
+    lr=1.0e-2,
     momentum=0.9,
     weight_decay=0.0,
 )

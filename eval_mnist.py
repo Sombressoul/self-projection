@@ -12,25 +12,19 @@ from self_projection import SelfProjection
 # Evaluations and results:
 #
 # Standard Conditions:
-# python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=1
 # python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 0.1253, Accuracy: 9610/10000 (96%)
-# Test set: Average loss: 0.1169, Accuracy: 9648/10000 (96%)
+# Test set: Average loss: 0.1160, Accuracy: 9624/10000 (96%)
 #
 # Heavy Reduction with High Dropout:
-# python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=1
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 0.5869, Accuracy: 8233/10000 (82%)
-# Test set: Average loss: 0.4224, Accuracy: 8809/10000 (88%)
+# Test set: Average loss: 0.4368, Accuracy: 8854/10000 (89%)
 #
 # Heavy Reduction with High Dropout of Projection and Extreme Dropout of Input:
-# python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=1
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 1.0681, Accuracy: 7085/10000 (71%)
-# Test set: Average loss: 0.9135, Accuracy: 7633/10000 (76%)
+# Test set: Average loss: 0.9753, Accuracy: 7386/10000 (74%)
 #
 # Total number of trainable parameters: 6090
 
@@ -68,7 +62,7 @@ class Net(nn.Module):
     ):
         x = x.squeeze(1)
         x = self.dropout_input(x)
-        x = self.self_projection(x)[0]
+        x = self.self_projection(x)
         x = self.activation(x)
         x = self.dropout_projection(x)
         x = x.flatten(1)
