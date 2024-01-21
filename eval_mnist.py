@@ -25,7 +25,8 @@ from self_projection import SelfProjection
 # python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
 # Results:
 # Test set: Average loss: 1.0966, Accuracy: 7212/10000 (72%)
-
+#
+# Total number of trainable parameters: 6090
 
 class Net(nn.Module):
     p_size: int
