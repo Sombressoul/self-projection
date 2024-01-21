@@ -10,6 +10,7 @@ class SelfProjection(nn.Module):
     # Configurable params.
     size_input: Union[torch.Size, list[int]]
     size_projection: int
+    depth: int
     eps: float
     initializer: Callable[[torch.Tensor], torch.Tensor]
 
@@ -31,6 +32,7 @@ class SelfProjection(nn.Module):
         self,
         size_input: Union[torch.Size, list[int]],
         size_projection: int,
+        depth: int = 1,
         initializer: Callable[[torch.Tensor], torch.Tensor] = None,
         eps: float = 1e-5,
         **kwargs,
@@ -42,6 +44,7 @@ class SelfProjection(nn.Module):
             size_input if isinstance(size_input, torch.Size) else torch.Size(size_input)
         )
         self.size_projection = size_projection
+        self.depth = depth
         self.initializer = (
             initializer if initializer is not None else self._default_initializer
         )
@@ -57,21 +60,28 @@ class SelfProjection(nn.Module):
         self.beta = nn.Parameter(torch.zeros([size_projection, size_projection]))
 
         # Define trainable parameters: permutation matrices.
-        original_xj_y = torch.empty([self.size_input[1], self.size_projection])
+        original_xj_y = torch.empty([depth, self.size_input[1], self.size_projection])
         original_xj_y = self._initialize(original_xj_y)
         self.original_xj_y = nn.Parameter(original_xj_y)
 
-        original_xi_y = torch.empty([self.size_input[0], self.size_projection])
+        original_xi_y = torch.empty([depth, self.size_input[0], self.size_projection])
         original_xi_y = self._initialize(original_xi_y)
         self.original_xi_y = nn.Parameter(original_xi_y)
 
-        permuted_xj_y = torch.empty([self.size_input[0], self.size_projection])
+        permuted_xj_y = torch.empty([depth, self.size_input[0], self.size_projection])
         permuted_xj_y = self._initialize(permuted_xj_y)
         self.permuted_xj_y = nn.Parameter(permuted_xj_y)
 
-        permuted_xi_y = torch.empty([self.size_input[1], self.size_projection])
+        permuted_xi_y = torch.empty([depth, self.size_input[1], self.size_projection])
         permuted_xi_y = self._initialize(permuted_xi_y)
         self.permuted_xi_y = nn.Parameter(permuted_xi_y)
+
+        # Define trainable parameters: accumulation matrices.
+        accumulator_original = torch.zeros([self.size_projection, self.size_projection])
+        self.accumulator_original = nn.Parameter(accumulator_original)
+
+        accumulator_permuted = torch.zeros([self.size_projection, self.size_projection])
+        self.accumulator_permuted = nn.Parameter(accumulator_permuted)
 
         pass
 
@@ -105,11 +115,17 @@ class SelfProjection(nn.Module):
         x: torch.FloatTensor,
         mat_xj: nn.Parameter,
         mat_xi: nn.Parameter,
+        accumulator: nn.Parameter,
     ) -> tuple[torch.FloatTensor]:
-        x = x @ mat_xj
-        x_sum = x.sum(dim=-2)
-        x = x.permute([0, -1, -2]) @ mat_xi
-        x = x.permute([0, -1, -2])
+        x_sum = torch.zeros([x.shape[0], self.size_projection])
+        x_sum = x_sum.to(device=x.device, dtype=x.dtype)
+        for depth in range(self.depth):
+            x_buf = x @ mat_xj[depth]
+            x_sum = x_sum + x_buf.sum(dim=-2)
+            x_buf = x_buf.permute([0, -1, -2]) @ mat_xi[depth]
+            x_buf = x_buf.permute([0, -1, -2])
+            accumulator = accumulator.add(x_buf)
+        x = accumulator
         return x, x_sum
 
     def forward(
@@ -125,6 +141,7 @@ class SelfProjection(nn.Module):
             x=original,
             mat_xj=self.original_xj_y,
             mat_xi=self.original_xi_y,
+            accumulator=self.accumulator_original,
         )
         original_yy = self._normalize(
             x=original_yy,
@@ -138,6 +155,7 @@ class SelfProjection(nn.Module):
             x=permuted,
             mat_xj=self.permuted_xj_y,
             mat_xi=self.permuted_xi_y,
+            accumulator=self.accumulator_permuted,
         )
         permuted_yy = self._normalize(
             x=permuted_yy,
