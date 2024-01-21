@@ -6,15 +6,9 @@ import torch.nn.functional as F
 from self_projection import SelfProjection
 
 # seeding
-torch.manual_seed(1)
+torch.manual_seed(1337)
 
-# Current:
-# 128x96x16 -> 128x8x8: seed -> 42:     1xSelfProjection    -> loss 0.041601695120334625
-# 128x96x16 -> 128x8x8: seed -> 1337:   2xSelfProjection    -> loss 0.03616994619369507
-
-# 128x16x96 -> 128x8x8: seed -> 313:    1xSelfProjection    -> loss 0.0419158972799778
-# 128x16x96 -> 128x8x8: seed -> 479:    2xSelfProjection    -> loss 0.03455526381731033
-
+depth = 1
 input_shape = [96, 16]
 matrices_count = 128
 matrices_input = torch.rand([matrices_count, *input_shape]).to(
@@ -37,10 +31,12 @@ class Net(nn.Module):
         self.self_projection_a = SelfProjection(
             size_input=i_size,
             size_projection=p_size,
+            depth=depth,
         )
         self.self_projection_b = SelfProjection(
             size_input=[p_size, p_size],
             size_projection=p_size,
+            depth=depth,
         )
         pass
 

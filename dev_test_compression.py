@@ -8,16 +8,11 @@ from self_projection import SelfProjection
 # seeding
 torch.manual_seed(2)
 
-# Current:
-# 128x64-128x16-128x64,     seed = 1,   loss = 0.07065999507904053
-# 256x128-256x32-256x128,   seed = 1,   loss = 0.0739060491323471
-# 256x128-256x64-256x128,   seed = 2,   loss = 0.05586353689432144
-
-
 input_size = 128
 projection_size = 64
 matrices_count = 256
 epochs = 1.0e4
+depth = 1
 
 
 class Net(nn.Module):
@@ -30,10 +25,12 @@ class Net(nn.Module):
         self.self_projection_encode = SelfProjection(
             size_input=[i_size] * 2,
             size_projection=p_size,
+            depth=depth,
         )
         self.self_projection_decode = SelfProjection(
             size_input=[p_size] * 2,
             size_projection=i_size,
+            depth=depth,
         )
         pass
 
