@@ -169,8 +169,8 @@ class SelfProjection(nn.Module):
             x_sum = F.softmax(x_sum, dim=-1).unsqueeze(-1)
             x_buf = x_buf.permute([0, -1, -2]) @ mat_xi[depth]
             x_buf = x_buf.permute([0, -1, -2])
-            x_buf = self.activation(x_buf)
             x_buf = x_buf.mul(x_sum)
+            x_buf = self.activation(x_buf)
             accumulator = accumulator.add(x_buf)
         x = accumulator
         return x
