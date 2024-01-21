@@ -45,17 +45,29 @@ class ExperimentalModel(nn.Module):
 
 
 # Model for evaluation: SelfProjection
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0
-# Total number of trainable parameters: 31332
-# Test set: Average loss: 3.0645, Accuracy: 2673/10000 (27%)
+#
+# SelfProjection depth -> 1
+# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=1
+# Total number of trainable parameters: 31844
+# Test set: Average loss: 3.0210, Accuracy: 2748/10000 (27%)
+#
+# SelfProjection depth -> 4
+# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=4
+# Total number of trainable parameters: 44132
+# Test set: Average loss: 3.0616, Accuracy: 2610/10000 (26%)
+#
+
+
 class NetSP(nn.Module):
     def __init__(
         self,
+        depth: int = 1,
     ):
         super(NetSP, self).__init__()
         self.self_projection = SelfProjection(
             size_input=(96, 32),
             size_projection=16,
+            depth=depth,
         )
         self.activation = nn.ReLU()
         self.fc = nn.Linear(16**2, 100)
@@ -239,6 +251,12 @@ def main():
         help="model type: 0 - SP, 1 - CNN, -1 - experimental (default: 0)",
     )
     parser.add_argument(
+        "--sp-depth",
+        type=int,
+        default=1,
+        help="SelfProjection depth (default: 1)",
+    )
+    parser.add_argument(
         "--save-model",
         action="store_true",
         default=False,
@@ -273,7 +291,7 @@ def main():
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
     if args.model == 0:
-        model = NetSP().to(device)
+        model = NetSP(depth=args.sp_depth).to(device)
     elif args.model == 1:
         model = NetCNN().to(device)
     elif args.model == -1:

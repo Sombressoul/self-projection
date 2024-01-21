@@ -12,30 +12,35 @@ from self_projection import SelfProjection
 # Evaluations and results:
 #
 # Standard Conditions:
-# python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
+# python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=1
+# python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 0.1306, Accuracy: 9598/10000 (96%)
+# Test set: Average loss: 0.1253, Accuracy: 9610/10000 (96%)
+# Test set: Average loss: 0.1169, Accuracy: 9648/10000 (96%)
 #
 # Heavy Reduction with High Dropout:
-# python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
+# python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=1
+# python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 0.6192, Accuracy: 8230/10000 (82%)
+# Test set: Average loss: 0.5869, Accuracy: 8233/10000 (82%)
+# Test set: Average loss: 0.4224, Accuracy: 8809/10000 (88%)
 #
 # Heavy Reduction with High Dropout of Projection and Extreme Dropout of Input:
-# python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
+# python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=1
+# python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7 --sp-depth=4
 # Results:
-# Test set: Average loss: 1.0966, Accuracy: 7212/10000 (72%)
+# Test set: Average loss: 1.0681, Accuracy: 7085/10000 (71%)
+# Test set: Average loss: 0.9135, Accuracy: 7633/10000 (76%)
 #
 # Total number of trainable parameters: 6090
 
 class Net(nn.Module):
-    p_size: int
-
     def __init__(
         self,
         p_size: int,
         dropout_rate_i: float,
         dropout_rate_p: float,
+        depth: int = 1,
     ):
         super(Net, self).__init__()
 
@@ -48,6 +53,7 @@ class Net(nn.Module):
         self.self_projection = SelfProjection(
             size_input=(28, 28),
             size_projection=p_size,
+            depth=depth,
         )
         self.dropout_projection = nn.Dropout(dropout_rate_p)
         self.activation = nn.Tanh()
@@ -211,6 +217,12 @@ def main():
         default=0.75,
         help="Projection dropout rate",
     )
+    parser.add_argument(
+        "--sp-depth",
+        type=int,
+        default=1,
+        help="SelfProjection depth (default: 1)",
+    )
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     use_mps = not args.no_mps and torch.backends.mps.is_available()
@@ -243,6 +255,7 @@ def main():
         p_size=args.p_size,
         dropout_rate_i=args.dropout_rate_i,
         dropout_rate_p=args.dropout_rate_p,
+        depth=args.sp_depth,
     ).to(device)
 
     total_trainable_params = sum(
