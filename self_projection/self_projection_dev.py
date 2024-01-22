@@ -15,21 +15,12 @@ class SelfProjectionDev(nn.Module):
     eps: float
     delta: float
     initializer: Callable[[torch.Tensor], torch.Tensor]
-    activation: Callable[[torch.Tensor], torch.Tensor]
-
-    # Normalizations params.
-    gamma: nn.Parameter
-    beta: nn.Parameter
 
     # Trainable params.
     original_xj_y: nn.Parameter
     original_xi_y: nn.Parameter
     permuted_xj_y: nn.Parameter
     permuted_xi_y: nn.Parameter
-    original_rel_importance_i: nn.Parameter
-    original_rel_importance_j: nn.Parameter
-    permuted_rel_importance_i: nn.Parameter
-    permuted_rel_importance_j: nn.Parameter
 
     def __init__(
         self,
@@ -37,7 +28,6 @@ class SelfProjectionDev(nn.Module):
         size_projection: int,
         depth: int = 1,
         initializer: Callable[[torch.Tensor], torch.Tensor] = None,
-        activation: Callable[[torch.Tensor], torch.Tensor] = None,
         eps: float = 1e-5,
         delta: float = 5.0e-2,
         **kwargs,
@@ -53,15 +43,8 @@ class SelfProjectionDev(nn.Module):
         self.initializer = (
             initializer if initializer is not None else self._default_initializer
         )
-        self.activation = (
-            activation if activation is not None else self._default_activation
-        )
         self.eps = eps
         self.delta = delta
-
-        # Define trainable parameters: normalization scale & bias.
-        self.gamma = nn.Parameter(torch.ones([size_projection, size_projection]))
-        self.beta = nn.Parameter(torch.zeros([size_projection, size_projection]))
 
         # Define trainable parameters: permutation matrices.
         t_src_shape_xi = [self.depth, self.size_input[0], self.size_projection]
@@ -118,30 +101,11 @@ class SelfProjectionDev(nn.Module):
     ) -> torch.Tensor:
         return nn.init.xavier_uniform_(x, gain=nn.init.calculate_gain("relu"))
 
-    def _default_activation(
-        self,
-        x: torch.Tensor,
-    ) -> torch.Tensor:
-        return F.tanh(x)
-
     def _initialize(
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
         return self.initializer(x)
-
-    def _normalize(
-        self,
-        x: torch.FloatTensor,
-        dims: list[int],
-        gamma: nn.Parameter,
-        beta: nn.Parameter,
-    ) -> torch.FloatTensor:
-        mean = x.mean(dim=dims, keepdim=True)
-        std = x.std(dim=dims, keepdim=True)
-        y = (x - mean) / (std + self.eps)
-        norm = gamma * y + beta
-        return norm
 
     def forward(
         self,
@@ -171,43 +135,31 @@ class SelfProjectionDev(nn.Module):
             o_rel_mat_xj_buf = o_rel_mat_xj
             o_rel_xj_buf = self.dropout(x) @ o_rel_mat_xj_buf
             o_rel_xj_buf = o_rel_xj_buf.flatten(1).softmax(dim=1).reshape(o_rel_xj_buf.shape)
-            # print(f"o_rel_xj_buf.shape = {o_rel_xj_buf.shape}")
             o_rel_xj_sum = o_rel_xj_buf.sum(dim=-2)
-            # print(f"o_rel_xj_sum.shape = {o_rel_xj_sum.shape}")
             
             o_rel_mat_xi_buf = o_rel_mat_xi
             o_rel_xi_buf = self.dropout(x).permute([0, -1, -2]) @ o_rel_mat_xi_buf
             o_rel_xi_buf = o_rel_xi_buf.flatten(1).softmax(dim=1).reshape(o_rel_xi_buf.shape)
-            # print(f"o_rel_xi_buf.shape = {o_rel_xi_buf.shape}")
             o_rel_xi_sum = o_rel_xi_buf.sum(dim=-2)
-            # print(f"o_rel_xi_sum.shape = {o_rel_xi_sum.shape}")
 
             # Transform original matrices.
             o_trans_xj_buf = self.dropout(x) @ o_mat_xj
-            # print(f"o_trans_xj_buf.shape = {o_trans_xj_buf.shape}")
             o_trans_xi_buf = self.dropout(x).permute([0, -1, -2]) @ o_mat_xi
-            # print(f"o_trans_xi_buf.shape = {o_trans_xi_buf.shape}")
 
             # Transform permuted matrices.
             p_trans_xj_buf = o_trans_xj_buf.permute([0, -1, -2]) @ p_mat_xj
-            # print(f"p_trans_xj_buf.shape = {p_trans_xj_buf.shape}")
             p_trans_xi_buf = o_trans_xi_buf.permute([0, -1, -2]) @ p_mat_xi
-            # print(f"p_trans_xi_buf.shape = {p_trans_xi_buf.shape}")
 
             # Compute permuted relation matrices.
             p_rel_mat_xj_buf = p_rel_mat_xj
             p_rel_xj_buf = p_trans_xj_buf @ p_rel_mat_xj_buf
             p_rel_xj_buf = p_rel_xj_buf.flatten(1).softmax(dim=1).reshape(p_rel_xj_buf.shape)
-            # print(f"p_rel_xj_buf.shape = {p_rel_xj_buf.shape}")
             p_rel_xj_sum = p_rel_xj_buf.sum(dim=-2)
-            # print(f"p_rel_xj_sum.shape = {p_rel_xj_sum.shape}")
 
             p_rel_mat_xi_buf = p_rel_mat_xi
             p_rel_xi_buf = p_trans_xi_buf @ p_rel_mat_xi_buf
             p_rel_xi_buf = p_rel_xi_buf.flatten(1).softmax(dim=1).reshape(p_rel_xi_buf.shape)
-            # print(f"p_rel_xi_buf.shape = {p_rel_xi_buf.shape}")
             p_rel_xi_sum = p_rel_xi_buf.sum(dim=-2)
-            # print(f"p_rel_xi_sum.shape = {p_rel_xi_sum.shape}")
 
             # Calculate feature-rescaling factors.
             f_scale_j = (o_rel_xj_sum / p_rel_xj_sum).sqrt()
@@ -227,12 +179,4 @@ class SelfProjectionDev(nn.Module):
             # Accumulate values.
             projection = projection.add(x_buf)
         
-        # Normalize projection.
-        projection = self._normalize(
-            x=projection,
-            dims=[-1, -2],
-            gamma=self.gamma,
-            beta=self.beta,
-        )
-
         return projection
