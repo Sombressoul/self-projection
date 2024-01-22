@@ -175,6 +175,9 @@ class SelfProjectionDev(nn.Module):
             x_buf = (x_buf - x_buf_mean) / (x_buf_std + self.eps)
             x_buf = (x_buf * x_origin_std) + x_origin_mean
 
+            # Scale down in accordance to overall depth.
+            x_buf = x_buf * (1.0 / self.depth)
+
             # Accumulate values.
             projection = projection.add(x_buf)
         
