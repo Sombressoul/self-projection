@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from self_projection import SelfProjection
+# from self_projection import SelfProjectionDev as SelfProjection
 
 # seeding
 torch.manual_seed(2)
@@ -12,7 +13,7 @@ input_size = 128
 projection_size = 64
 matrices_count = 256
 epochs = 1.0e4
-depth = 1
+depth = 4
 
 
 class Net(nn.Module):
@@ -39,8 +40,8 @@ class Net(nn.Module):
         x: torch.Tensor,
     ):
         x = (x - x.mean(dim=[-1, -2], keepdim=True)) / (x.std() + 1.0e-5)
-        x = self.self_projection_encode(x)[0]
-        x = self.self_projection_decode(x)[0]
+        x = self.self_projection_encode(x)
+        x = self.self_projection_decode(x)
         return x
 
 

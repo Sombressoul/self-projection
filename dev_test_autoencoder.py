@@ -10,94 +10,33 @@ import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 from madgrad import MADGRAD
 
-from self_projection import SelfProjection
+from models import SimpleAutoencoderSPSP
 
 # seeding
 torch.manual_seed(42)
 
 # AE params
-self_projection_depth = 16
-epochs = 1000
-folder_path = "data/ae_test_5k"
-batch_size = 32
-dropout_rate = 0.0
-log_nth_epoch = 10
+model_dev_mode = True
+epochs = 100
+folder_path = "data/ae_test_5k_2_1"
+batch_size = 64
+log_nth_epoch = 1
 log_image_idx = 0
-save_nth_epoch = 10
+save_model_nth_epoch = 10
+save_image_nth_batch = 0
 
+use_clip_grad_value = False
+clip_grad_value = 1.0
 
-class Net(nn.Module):
-    def __init__(
-        self,
-        i_size: int,
-        depth: int,
-        dropout_rate: float,
-    ):
-        super(Net, self).__init__()
-        self.layer_norm_input = nn.LayerNorm([i_size] * 2)
-        self.self_projection_encode_a = SelfProjection(
-            size_input=[i_size] * 2,
-            size_projection=128,
-            depth=depth,
-        )
-        self.layer_norm_encode_a = nn.LayerNorm([128] * 2)
-        self.self_projection_encode_b = SelfProjection(
-            size_input=[128] * 2,
-            size_projection=64,
-            depth=depth,
-        )
-        self.layer_norm_encode_b = nn.LayerNorm([64] * 2)
-        self.self_projection_encode_c = SelfProjection(
-            size_input=[64] * 2,
-            size_projection=32,
-            depth=depth,
-        )
-        self.layer_norm_encode_c = nn.LayerNorm([32] * 2)
-        self.self_projection_decode_c = SelfProjection(
-            size_input=[32] * 2,
-            size_projection=64,
-            depth=depth,
-        )
-        self.layer_norm_decode_c = nn.LayerNorm([64] * 2)
-        self.self_projection_decode_b = SelfProjection(
-            size_input=[64] * 2,
-            size_projection=128,
-            depth=depth,
-        )
-        self.layer_norm_decode_b = nn.LayerNorm([128] * 2)
-        self.self_projection_decode_a = SelfProjection(
-            size_input=[128] * 2,
-            size_projection=i_size,
-            depth=depth,
-        )
-        self.dropout = nn.Dropout(dropout_rate)
-        self.activation = nn.Identity()
-        pass
+use_clip_grad_norm = True
+clip_grad_norm_max = 0.5
+clip_grad_norm_type = 2.0
 
-    def forward(
-        self,
-        x: torch.Tensor,
-    ):
-        # x = self.layer_norm_input(x)
-        x = self.self_projection_encode_a(x)
-        x = self.activation(x)
-        x = self.layer_norm_encode_a(x)
-        x = self.self_projection_encode_b(x)
-        x = self.activation(x)
-        x = self.layer_norm_encode_b(x)
-        x = self.self_projection_encode_c(x)
-        x = self.activation(x)
-        x = self.layer_norm_encode_c(x)
-        latents = x.clone()
-        x = self.dropout(x)
-        x = self.self_projection_decode_c(x)
-        x = self.activation(x)
-        x = self.layer_norm_decode_c(x)
-        x = self.self_projection_decode_b(x)
-        x = self.activation(x)
-        x = self.layer_norm_decode_b(x)
-        x = self.self_projection_decode_a(x)
-        return x, latents
+model_sp_depth = 4
+model_nn_depth = 3
+
+load_from_checkpoint = True
+checkpoint_path = "temp/AutoencoderSPSP_02.pt"
 
 
 def train(model, optimizer, tensor_images, epochs):
@@ -110,13 +49,14 @@ def train(model, optimizer, tensor_images, epochs):
         running_loss = 0.0
 
         for i in tqdm.tqdm(range(0, tensor_images.shape[0], batch_size)):
+            batch_idx = i // batch_size
             optimizer.zero_grad()
             batch = tensor_images[i : i + batch_size]
             matrices_output, latents = model(batch)
 
-            # loss = F.mse_loss(matrices_output, batch)
+            loss = F.mse_loss(matrices_output, batch)
 
-            loss = F.huber_loss(matrices_output, batch, reduction="mean", delta=1.0)
+            # loss = F.huber_loss(matrices_output, batch, reduction="mean", delta=1.0)
 
             # x = F.log_softmax(matrices_output, dim=-2)
             # y = F.log_softmax(batch, dim=-2)
@@ -124,32 +64,85 @@ def train(model, optimizer, tensor_images, epochs):
 
             loss.backward()
             running_loss += loss.item() * batch.shape[0]
+
+            if save_image_nth_batch > 0 and batch_idx % save_image_nth_batch == 0:
+                log_image(
+                    f"epoch_{str(epoch)}_batch_{str(batch_idx)}",
+                    batch[log_image_idx],
+                    matrices_output[log_image_idx],
+                    latents[log_image_idx],
+                    running_loss / (i + batch_size),
+                )
+
+            assert not all(
+                [use_clip_grad_value, use_clip_grad_norm]
+            ), "Only one of clip_grad_value or clip_grad_norm can be used"
+
+            if use_clip_grad_value:
+                nn.utils.clip_grad_value_(
+                    model.parameters(),
+                    clip_value=clip_grad_value,
+                )
+            if use_clip_grad_norm:
+                nn.utils.clip_grad_norm_(
+                    model.parameters(),
+                    max_norm=clip_grad_norm_max,
+                    norm_type=clip_grad_norm_type,
+                )
+
             optimizer.step()
 
         running_loss = running_loss / tensor_images.shape[0]
 
         if epoch % log_nth_epoch == 0:
-            size = [matrices_output.shape[-2], matrices_output.shape[-1]]
-            latents = latents[log_image_idx]
-            latents = latents.reshape([1, 1, *latents.shape])
-            latents = (latents - latents.min()) / (latents.max() - latents.min())
-            latents = F.interpolate(latents, size=size, mode="bilinear")
-            latents = latents.reshape([latents.shape[-2], latents.shape[-1]])
-            combined_tensor = torch.cat(
-                (batch[log_image_idx], matrices_output[log_image_idx], latents), 1
-            ).clip(0.0, 1.0)
-            combined_image = tensor_to_image(combined_tensor)
-            text = f"Loss: {running_loss:.4f}"
-            combined_image = add_text_to_image(combined_image, text)
-            combined_image.save(f"temp/epoch_{str(epoch)}.png")
+            # size = [matrices_output.shape[-2], matrices_output.shape[-1]]
+            # latents = latents[log_image_idx]
+            # latents = latents.reshape([1, 1, *latents.shape])
+            # latents = (latents - latents.min()) / (latents.max() - latents.min())
+            # latents = F.interpolate(latents, size=size, mode="nearest")
+            # latents = latents.reshape([latents.shape[-2], latents.shape[-1]])
+            # combined_tensor = torch.cat(
+            #     (batch[log_image_idx], matrices_output[log_image_idx], latents), 1
+            # ).clip(0.0, 1.0)
+            # combined_image = tensor_to_image(combined_tensor)
+            # text = f"Loss: {running_loss:.4f}"
+            # combined_image = add_text_to_image(combined_image, text)
+            # combined_image.save(f"temp/epoch_{str(epoch)}.png")
+            log_image(
+                f"epoch_{str(epoch)}",
+                batch[log_image_idx],
+                matrices_output[log_image_idx],
+                latents[log_image_idx],
+                running_loss,
+            )
             # print(f"epoch {epoch} loss {running_loss}")
             loss_data.append(running_loss)
-        
-        if epoch % save_nth_epoch == 0:
+
+        if epoch % save_model_nth_epoch == 0:
             torch.save(model.state_dict(), f"temp/model_epoch_{str(epoch)}.pth")
 
     plt.plot(loss_data)
     plt.show()
+
+
+def log_image(name, t_src_image, t_output_image, t_latents, f_loss):
+    size = [t_src_image.shape[-2], t_src_image.shape[-1]]
+
+    t_latents = t_latents.reshape([1, 1, *t_latents.shape])
+    t_latents = (t_latents - t_latents.min()) / (t_latents.max() - t_latents.min())
+    t_latents = F.interpolate(t_latents, size=size, mode="nearest")
+    t_latents = t_latents.reshape([t_latents.shape[-2], t_latents.shape[-1]])
+
+    combined_tensor = torch.cat((t_src_image, t_output_image, t_latents), 1).clip(
+        0.0, 1.0
+    )
+    combined_image = tensor_to_image(combined_tensor)
+
+    text = f"Loss: {f_loss:.4f}"
+    combined_image = add_text_to_image(combined_image, text)
+    combined_image.save(f"temp/{str(name)}.png")
+
+    pass
 
 
 def load_images_from_folder(folder, transform=None):
@@ -176,6 +169,9 @@ def add_text_to_image(image, text, position=(10, 10), font_size=20, font_color="
     draw.text(position, text, fill=font_color, font=font)
     return image
 
+def load_model(model, model_path):
+    model.load_state_dict(torch.load(model_path))
+    return model
 
 # Prepare images from folder
 transform = transforms.Compose(
@@ -196,13 +192,31 @@ tensor_images = tensor_images.clone()
 
 # train
 input_size = tensor_images.shape[1]
-model = Net(input_size, self_projection_depth, dropout_rate).to("cuda")
+model = SimpleAutoencoderSPSP(
+    input_size=input_size,
+    network_depth=model_nn_depth,
+    self_projection_depth=model_sp_depth,
+    dev=model_dev_mode,
+).to("cuda")
+
+if load_from_checkpoint:
+    model = load_model(model, checkpoint_path)
+
 optimizer = MADGRAD(
     model.parameters(),
-    lr=1.0e-2,
+    lr=1.0e-4,
     momentum=0.9,
     weight_decay=0.0,
 )
+# optimizer = optim.Adam(
+#     model.parameters(),
+#     lr=1.0e-5,
+#     weight_decay=1.0e-4,
+# )
+# optimizer = optim.SGD(
+#     model.parameters(),
+#     lr=1.0e-3,
+# )
 
 total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Total number of trainable parameters: {total_trainable_params}")

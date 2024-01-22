@@ -7,10 +7,15 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
-from self_projection import SelfProjection
+# from self_projection import SelfProjection
+from self_projection import SelfProjectionDev as SelfProjection
 
 
 # Experimental model.
+#
+# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=-1 --sp-depth=4
+
+
 class ExperimentalModel(nn.Module):
     def __init__(
         self,
@@ -34,9 +39,9 @@ class ExperimentalModel(nn.Module):
         x: torch.Tensor,
     ):
         x = x.view([-1, 96, 32])
-        x = self.self_projection_a(x)[0]
+        x = self.self_projection_a(x)
         x = self.activation(x)
-        x = self.self_projection_b(x)[0]
+        x = self.self_projection_b(x)
         x = self.activation(x)
         x = x.flatten(1)
         x = self.fc(x)
@@ -50,11 +55,16 @@ class ExperimentalModel(nn.Module):
 # python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=1
 # Total number of trainable parameters: 31844
 # Test set: Average loss: 3.0497, Accuracy: 2736/10000 (27%)
+# Dev version results:
+# Test set: Average loss: 3.0085, Accuracy: 2771/10000 (28%)
 #
 # SelfProjection depth -> 4
 # python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=4
 # Total number of trainable parameters: 44132
 # Test set: Average loss: 3.0691, Accuracy: 2690/10000 (27%)
+# Dev version results:
+# Test set: Average loss: 3.0389, Accuracy: 2695/10000 (27%)
+
 
 class NetSP(nn.Module):
     def __init__(
