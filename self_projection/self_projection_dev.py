@@ -184,6 +184,10 @@ class SelfProjectionDev(nn.Module):
                         f"scale_p_rel_xi_buf_{depth}",
                         t_src_shape_p,
                     ),
+                    x_buf=self._create_scale(
+                        f"scale_x_buf_{depth}",
+                        t_src_shape_p,
+                    ),
                 )
 
         # Create bias params.
@@ -222,6 +226,10 @@ class SelfProjectionDev(nn.Module):
                     ),
                     p_rel_xi_buf=self._create_bias(
                         f"bias_p_rel_xi_buf_{depth}",
+                        t_src_shape_p,
+                    ),
+                    x_buf=self._create_bias(
+                        f"bias_x_buf_{depth}",
                         t_src_shape_p,
                     ),
                 )
@@ -411,6 +419,7 @@ class SelfProjectionDev(nn.Module):
 
             # Combine, scale and apply initial distribution.
             x_buf = xj_buf * xi_buf.permute([0, -1, -2])
+            x_buf = self._scale_and_bias(x_buf, "x_buf", depth)
             x_buf = self._activate(x_buf, "x_buf", depth)
 
             if self.preserve_distribution:
@@ -428,5 +437,5 @@ class SelfProjectionDev(nn.Module):
 
             # Accumulate values.
             projection = projection.add(x_buf)
-
+        
         return projection
