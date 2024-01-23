@@ -1,9 +1,41 @@
 import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from typing import Union
 from collections.abc import Callable
+
+
+class ParametricTanh(nn.Module):
+    def __init__(
+        self,
+        initial_gamma: float = 0.5,
+        gamma_min: float = -2.0,
+        gamma_max: float = 2.0,
+    ):
+        super(ParametricTanh, self).__init__()
+
+        self.gamma_min = gamma_min
+        self.gamma_max = gamma_max
+        self.gamma = nn.Parameter(torch.tensor([initial_gamma]))
+
+        self.register_parameter_constraint_hooks()
+
+        pass
+
+    def forward(
+        self,
+        x: torch.Tensor,
+    ):
+        return x * (1 - self.gamma) + torch.tanh(x) * self.gamma
+
+    def enforce_gamma_constraints(self):
+        with torch.no_grad():
+            self.gamma.clamp_(self.gamma_min, self.gamma_max)
+
+    def register_parameter_constraint_hooks(self):
+        self.gamma.register_hook(lambda grad: self.enforce_gamma_constraints())
 
 
 class SelfProjectionDev(nn.Module):
@@ -92,12 +124,16 @@ class SelfProjectionDev(nn.Module):
         mat_permuted_rel_xi_y = self._initialize(mat_permuted_rel_xi_y)
         self.mat_permuted_rel_xi_y = nn.Parameter(mat_permuted_rel_xi_y)
 
-        # Define trainable parameters: projection matrices.
+        # Define trainable parameters: projection scaling.
         t_src_shape_ij = [self.depth, self.size_projection, self.size_projection]
 
-        mat_projected = torch.empty(t_src_shape_ij)
-        mat_projected = self._initialize(mat_projected)
-        self.mat_projected = nn.Parameter(mat_projected)
+        mat_projected_gamma = torch.empty(t_src_shape_ij)
+        mat_projected_gamma = self._initialize(mat_projected_gamma)
+        self.mat_projected_gamma = nn.Parameter(mat_projected_gamma)
+
+        mat_projected_beta = torch.empty(t_src_shape_ij)
+        mat_projected_beta = self._initialize(mat_projected_beta)
+        self.mat_projected_beta = nn.Parameter(mat_projected_beta)
 
         # Init submodules.
         p = 1.0 - math.exp(-math.fabs(self.delta) * (self.depth - 1))
@@ -116,6 +152,14 @@ class SelfProjectionDev(nn.Module):
         x: torch.Tensor,
     ) -> torch.Tensor:
         return self.initializer(x)
+    
+    def _standardize(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        x_mean = x.mean(dim=[-1, -2], keepdim=True)
+        x_std = x.std(dim=[-1, -2], keepdim=True)
+        return (x - x_mean) / (x_std + self.eps)
 
     def forward(
         self,
@@ -140,7 +184,8 @@ class SelfProjectionDev(nn.Module):
             p_mat_xi = self.mat_permuted_xi_y[depth]
             p_mat_rel_xj = self.mat_permuted_rel_xj_y[depth]
             p_mat_rel_xi = self.mat_permuted_rel_xi_y[depth]
-            mat_projected = self.mat_projected[depth]
+            mat_projected_gamma = self.mat_projected_gamma[depth]
+            mat_projected_beta = self.mat_projected_beta[depth]
 
             # Compute original relation matrices.
             o_mat_rel_xj_buf = o_mat_rel_xj
@@ -152,6 +197,7 @@ class SelfProjectionDev(nn.Module):
 
             o_mat_rel_xi_buf = o_mat_rel_xi
             o_rel_xi_buf = self.dropout(x).permute([0, -1, -2]) @ o_mat_rel_xi_buf
+            o_rel_xi_buf = o_rel_xi_buf.permute([0, -1, -2]) # permute back
             o_rel_xi_buf = (
                 o_rel_xi_buf.flatten(1).softmax(dim=1).reshape(o_rel_xi_buf.shape)
             )
@@ -159,11 +205,20 @@ class SelfProjectionDev(nn.Module):
 
             # Transform original matrices.
             o_trans_xj_buf = self.dropout(x) @ o_mat_xj
+            o_trans_xj_buf = F.selu(o_trans_xj_buf)
+            o_trans_xj_buf = self._standardize(o_trans_xj_buf)
             o_trans_xi_buf = self.dropout(x).permute([0, -1, -2]) @ o_mat_xi
+            o_trans_xi_buf = F.selu(o_trans_xi_buf)
+            o_trans_xi_buf = self._standardize(o_trans_xi_buf)
 
             # Transform permuted matrices.
             p_trans_xj_buf = o_trans_xj_buf.permute([0, -1, -2]) @ p_mat_xj
+            p_trans_xj_buf = F.selu(p_trans_xj_buf)
+            p_trans_xj_buf = self._standardize(p_trans_xj_buf)
             p_trans_xi_buf = o_trans_xi_buf.permute([0, -1, -2]) @ p_mat_xi
+            p_trans_xi_buf = p_trans_xi_buf.permute([0, -1, -2]) # permute back
+            p_trans_xi_buf = F.selu(p_trans_xi_buf)
+            p_trans_xi_buf = self._standardize(p_trans_xi_buf)
 
             # Compute permuted relation matrices.
             p_mat_rel_xj_buf = p_mat_rel_xj
@@ -188,15 +243,14 @@ class SelfProjectionDev(nn.Module):
             xj_buf = p_trans_xj_buf * f_scale_j.unsqueeze(-1)
             xi_buf = p_trans_xi_buf * f_scale_i.unsqueeze(-1)
 
-            # Combine and apply initial distribution.
-            x_buf = xj_buf + xi_buf.permute([0, -1, -2])
+            # Combine, scale and apply initial distribution.
+            x_buf = xj_buf * xi_buf.permute([0, -1, -2])
+            x_buf = F.selu(x_buf)
+            x_buf = (x_buf * mat_projected_gamma) + mat_projected_beta
             x_buf_mean = x_buf.mean(dim=[-1, -2], keepdim=True)
             x_buf_std = x_buf.std(dim=[-1, -2], keepdim=True)
             x_buf = (x_buf - x_buf_mean) / (x_buf_std + self.eps)
             x_buf = (x_buf * x_origin_std) + x_origin_mean
-
-            # Transform resulting projection.
-            x_buf = x_buf @ mat_projected
 
             # Scale down in accordance to overall depth.
             x_buf = x_buf * (1.0 / self.depth)
