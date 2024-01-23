@@ -92,6 +92,13 @@ class SelfProjectionDev(nn.Module):
         mat_permuted_rel_xi_y = self._initialize(mat_permuted_rel_xi_y)
         self.mat_permuted_rel_xi_y = nn.Parameter(mat_permuted_rel_xi_y)
 
+        # Define trainable parameters: projection matrices.
+        t_src_shape_ij = [self.depth, self.size_projection, self.size_projection]
+
+        mat_projected = torch.empty(t_src_shape_ij)
+        mat_projected = self._initialize(mat_projected)
+        self.mat_projected = nn.Parameter(mat_projected)
+
         # Init submodules.
         p = 1.0 - math.exp(-math.fabs(self.delta) * (self.depth - 1))
         self.dropout = nn.Dropout(p=p)
@@ -133,6 +140,7 @@ class SelfProjectionDev(nn.Module):
             p_mat_xi = self.mat_permuted_xi_y[depth]
             p_mat_rel_xj = self.mat_permuted_rel_xj_y[depth]
             p_mat_rel_xi = self.mat_permuted_rel_xi_y[depth]
+            mat_projected = self.mat_projected[depth]
 
             # Compute original relation matrices.
             o_mat_rel_xj_buf = o_mat_rel_xj
@@ -186,6 +194,9 @@ class SelfProjectionDev(nn.Module):
             x_buf_std = x_buf.std(dim=[-1, -2], keepdim=True)
             x_buf = (x_buf - x_buf_mean) / (x_buf_std + self.eps)
             x_buf = (x_buf * x_origin_std) + x_origin_mean
+
+            # Transform resulting projection.
+            x_buf = x_buf @ mat_projected
 
             # Scale down in accordance to overall depth.
             x_buf = x_buf * (1.0 / self.depth)
