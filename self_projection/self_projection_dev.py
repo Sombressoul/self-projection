@@ -227,7 +227,7 @@ class SelfProjectionDev(nn.Module):
                 )
 
         # Create ParametricTahn activations.
-        if self.activation is not None:
+        if self.activation is None:
             self.activations: list[dict[str, ParametricTanh]] = [None] * self.depth
             for depth in range(self.depth):
                 self.activations[depth] = dict(
