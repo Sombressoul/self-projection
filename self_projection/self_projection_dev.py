@@ -7,37 +7,6 @@ from typing import Union
 from collections.abc import Callable
 
 
-class ParametricTanh(nn.Module):
-    def __init__(
-        self,
-        initial_gamma: float = 0.5,
-        gamma_min: float = -2.0,
-        gamma_max: float = 2.0,
-    ):
-        super(ParametricTanh, self).__init__()
-
-        self.gamma_min = gamma_min
-        self.gamma_max = gamma_max
-        self.gamma = nn.Parameter(torch.tensor([initial_gamma]))
-
-        self.register_parameter_constraint_hooks()
-
-        pass
-
-    def forward(
-        self,
-        x: torch.Tensor,
-    ):
-        return x * (1 - self.gamma) + torch.tanh(x) * self.gamma
-
-    def enforce_gamma_constraints(self):
-        with torch.no_grad():
-            self.gamma.clamp_(self.gamma_min, self.gamma_max)
-
-    def register_parameter_constraint_hooks(self):
-        self.gamma.register_hook(lambda grad: self.enforce_gamma_constraints())
-
-
 class SelfProjectionDev(nn.Module):
     # Configurable params.
     size_input: Union[torch.Size, list[int]]
@@ -125,14 +94,12 @@ class SelfProjectionDev(nn.Module):
         self.mat_permuted_rel_xi_y = nn.Parameter(mat_permuted_rel_xi_y)
 
         # Define trainable parameters: projection scaling.
-        t_src_shape_ij = [self.depth, self.size_projection, self.size_projection]
+        t_src_shape_ij = [self.depth, 1]
 
-        mat_projected_gamma = torch.empty(t_src_shape_ij)
-        mat_projected_gamma = self._initialize(mat_projected_gamma)
+        mat_projected_gamma = torch.ones(t_src_shape_ij)
         self.mat_projected_gamma = nn.Parameter(mat_projected_gamma)
 
-        mat_projected_beta = torch.empty(t_src_shape_ij)
-        mat_projected_beta = self._initialize(mat_projected_beta)
+        mat_projected_beta = torch.zeros(t_src_shape_ij)
         self.mat_projected_beta = nn.Parameter(mat_projected_beta)
 
         # Init submodules.
@@ -152,7 +119,7 @@ class SelfProjectionDev(nn.Module):
         x: torch.Tensor,
     ) -> torch.Tensor:
         return self.initializer(x)
-    
+
     def _standardize(
         self,
         x: torch.Tensor,
@@ -197,7 +164,6 @@ class SelfProjectionDev(nn.Module):
 
             o_mat_rel_xi_buf = o_mat_rel_xi
             o_rel_xi_buf = self.dropout(x).permute([0, -1, -2]) @ o_mat_rel_xi_buf
-            o_rel_xi_buf = o_rel_xi_buf.permute([0, -1, -2]) # permute back
             o_rel_xi_buf = (
                 o_rel_xi_buf.flatten(1).softmax(dim=1).reshape(o_rel_xi_buf.shape)
             )
@@ -205,19 +171,19 @@ class SelfProjectionDev(nn.Module):
 
             # Transform original matrices.
             o_trans_xj_buf = self.dropout(x) @ o_mat_xj
-            o_trans_xj_buf = F.selu(o_trans_xj_buf)
+            o_trans_xj_buf = F.tanh(o_trans_xj_buf)
             o_trans_xj_buf = self._standardize(o_trans_xj_buf)
             o_trans_xi_buf = self.dropout(x).permute([0, -1, -2]) @ o_mat_xi
-            o_trans_xi_buf = F.selu(o_trans_xi_buf)
+            o_trans_xi_buf = F.tanh(o_trans_xi_buf)
             o_trans_xi_buf = self._standardize(o_trans_xi_buf)
 
             # Transform permuted matrices.
             p_trans_xj_buf = o_trans_xj_buf.permute([0, -1, -2]) @ p_mat_xj
-            p_trans_xj_buf = F.selu(p_trans_xj_buf)
+            p_trans_xj_buf = F.tanh(p_trans_xj_buf)
             p_trans_xj_buf = self._standardize(p_trans_xj_buf)
             p_trans_xi_buf = o_trans_xi_buf.permute([0, -1, -2]) @ p_mat_xi
-            p_trans_xi_buf = p_trans_xi_buf.permute([0, -1, -2]) # permute back
-            p_trans_xi_buf = F.selu(p_trans_xi_buf)
+            p_trans_xi_buf = p_trans_xi_buf.permute([0, -1, -2])  # permute back
+            p_trans_xi_buf = F.tanh(p_trans_xi_buf)
             p_trans_xi_buf = self._standardize(p_trans_xi_buf)
 
             # Compute permuted relation matrices.
@@ -245,12 +211,10 @@ class SelfProjectionDev(nn.Module):
 
             # Combine, scale and apply initial distribution.
             x_buf = xj_buf * xi_buf.permute([0, -1, -2])
-            x_buf = F.selu(x_buf)
-            x_buf = (x_buf * mat_projected_gamma) + mat_projected_beta
-            x_buf_mean = x_buf.mean(dim=[-1, -2], keepdim=True)
-            x_buf_std = x_buf.std(dim=[-1, -2], keepdim=True)
-            x_buf = (x_buf - x_buf_mean) / (x_buf_std + self.eps)
+            x_buf = F.tanh(x_buf)
+            x_buf = self._standardize(x_buf)
             x_buf = (x_buf * x_origin_std) + x_origin_mean
+            x_buf = (x_buf * mat_projected_gamma) + mat_projected_beta
 
             # Scale down in accordance to overall depth.
             x_buf = x_buf * (1.0 / self.depth)
