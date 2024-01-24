@@ -224,7 +224,7 @@ class AutoencoderCNNSP(nn.Module):
                 padding=1,
                 bias=True,
             ),
-            nn.ReLU(),
+            nn.SELU(),
             nn.BatchNorm2d(
                 num_features=self.channels_base,
             ),
@@ -236,7 +236,7 @@ class AutoencoderCNNSP(nn.Module):
                 padding=1,
                 bias=True,
             ),
-            nn.ReLU(),
+            nn.SELU(),
             nn.BatchNorm2d(
                 num_features=self.channels_base * 2,
             ),
@@ -248,7 +248,7 @@ class AutoencoderCNNSP(nn.Module):
                 padding=0,
                 bias=True,
             ),
-            nn.ReLU(),
+            nn.SELU(),
             nn.BatchNorm2d(
                 num_features=self.channels_base * 4,
             ),
@@ -265,7 +265,7 @@ class AutoencoderCNNSP(nn.Module):
                 if not self.baseline
                 else nn.Identity()
             ),
-            (nn.ReLU() if not self.baseline else nn.Identity()),
+            (nn.SELU() if not self.baseline else nn.Identity()),
             (
                 nn.BatchNorm2d(
                     num_features=self.scale_factor**2,
@@ -317,7 +317,7 @@ class AutoencoderCNNSP(nn.Module):
                 if self.baseline
                 else nn.Identity()
             ),
-            (nn.ReLU() if self.baseline else nn.Identity()),  # Baseline
+            (nn.SELU() if self.baseline else nn.Identity()),  # Baseline
         )
         return block
 
@@ -340,7 +340,7 @@ class AutoencoderCNNSP(nn.Module):
                 if self.baseline
                 else nn.Identity()
             ),
-            (nn.ReLU() if self.baseline else nn.Identity()),
+            (nn.SELU() if self.baseline else nn.Identity()),
             (
                 self.sp_class(  # Decompressor
                     size_input=[size_input, size_input],
@@ -399,7 +399,7 @@ class AutoencoderCNNSP(nn.Module):
                 if not self.baseline
                 else nn.Identity()
             ),
-            (nn.ReLU() if not self.baseline else nn.Identity()),
+            (nn.SELU() if not self.baseline else nn.Identity()),
             nn.BatchNorm2d(
                 num_features=self.channels_base * 4,
             ),
@@ -412,7 +412,7 @@ class AutoencoderCNNSP(nn.Module):
                 padding=0,
                 bias=True,
             ),
-            nn.ReLU(),
+            nn.SELU(),
             nn.BatchNorm2d(
                 num_features=self.channels_base * 2,
             ),
@@ -424,7 +424,7 @@ class AutoencoderCNNSP(nn.Module):
                 padding=1,
                 bias=True,
             ),
-            nn.ReLU(),
+            nn.SELU(),
             nn.BatchNorm2d(
                 num_features=self.channels_base,
             ),
@@ -435,9 +435,6 @@ class AutoencoderCNNSP(nn.Module):
                 stride=1,
                 padding=1,
                 bias=True,
-            ),
-            nn.BatchNorm2d(
-                num_features=math.ceil(self.channels_base / 2),
             ),
             nn.Conv2d(  # Output refiner.
                 in_channels=math.ceil(self.channels_base / 2),

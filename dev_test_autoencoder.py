@@ -1,5 +1,4 @@
 import os
-import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -20,13 +19,13 @@ from models import (
 # ____________________________> Config.
 # ================================================================================= #
 # Seeding:
-torch.manual_seed(1337)
+torch.manual_seed(1)
 
 # Data:
 images_path = "data/ae_test_5k_2_1"
 
 # Training:
-epochs = 500
+epochs = 1000
 batch_size = 16
 
 # Model:
