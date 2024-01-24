@@ -45,13 +45,15 @@ AutoencoderCNNSP_baseline = False
 AutoencoderCNNSP_dropout_rate = 0.1
 
 # Optimization:
-lr = 1.5e-4
-wd = 1.0e-5
+warmup_steps = 768
+learning_rate_start = 1.0e-12
+learning_rate_end = 1.5e-4
+weight_decay = 1.0e-5
 use_clip_grad_value = False
 clip_grad_value = 1.0
-use_clip_grad_norm = False
-clip_grad_norm_max = 0.1
-clip_grad_norm_type = 2.0
+use_clip_grad_norm = True
+clip_grad_norm_max = 1.0
+clip_grad_norm_type = 2.0 # L2
 
 # Logging/Plotting:
 log_nth_epoch = 1
@@ -62,7 +64,7 @@ plot_results = False
 # Checkpointing:
 dtype = torch.bfloat16
 save_model = True
-save_model_nth_epoch = 100
+save_model_nth_epoch = 10
 load_from_checkpoint = False
 checkpoint_path = "temp/AutoencoderCNNSP_01.pt"
 
@@ -82,6 +84,7 @@ sp_params = dict(
 def train(
     model: nn.Module,
     optimizer: optim.Optimizer,
+    scheduler: optim.lr_scheduler.LRScheduler,
     batch_size: int,
     tensor_images: torch.Tensor,
     epochs: int,
@@ -136,6 +139,7 @@ def train(
                 )
 
             optimizer.step()
+            scheduler.step()
 
         running_loss = running_loss / tensor_images.shape[0]
 
@@ -302,13 +306,33 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(
         model.parameters(),
-        lr=lr,
-        weight_decay=wd,
+        lr=learning_rate_start,
+        weight_decay=weight_decay,
+    )
+
+    scheduler_warmup = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer=optimizer,
+        T_max=warmup_steps,
+        eta_min=learning_rate_end,
+        verbose=False,
+    )
+    scheduler_constant = optim.lr_scheduler.ConstantLR(
+        optimizer=optimizer,
+        factor=1.0,
+        total_iters=1,
+        verbose=False,
+    )
+    scheduler_constant.base_lrs = [learning_rate_end] * len(optimizer.param_groups)
+    scheduler = optim.lr_scheduler.SequentialLR(
+        optimizer=optimizer,
+        schedulers=[scheduler_warmup, scheduler_constant],
+        milestones=[warmup_steps],
     )
 
     train(
         model=model,
         optimizer=optimizer,
+        scheduler=scheduler,
         batch_size=batch_size,
         tensor_images=tensor_images,
         epochs=epochs,
