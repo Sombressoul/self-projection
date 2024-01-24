@@ -32,7 +32,7 @@ class Checkerboard(nn.Module):
     ) -> torch.Tensor:
         if math.sqrt(x.shape[1]) % 1 != 0:
             raise ValueError("The number of channels must be a power of an integer.")
-        
+
         num_blocks_side = int(math.sqrt(x.shape[1]))
 
         x_reshaped = x.view(
@@ -166,8 +166,10 @@ class AutoencoderCNNSP(nn.Module):
 
         # Internal parameters.
         self.sp_class = SelfProjectionDev if dev else SelfProjection
-        self.baseline_bottleneck_c = math.ceil(math.sqrt(self.scale_factor * self.channels_base * 4))**2
-        
+        self.baseline_bottleneck_c = (
+            math.ceil(math.sqrt(self.scale_factor * self.channels_base * 4)) ** 2
+        )
+
         encoder_base = input_size
         encoder_dims = [encoder_base]
         for _ in range(network_depth):
@@ -392,10 +394,18 @@ class AutoencoderCNNSP(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(
                 in_channels=self.channels_base,
-                out_channels=1,
+                out_channels=math.ceil(self.channels_base / 2),
                 kernel_size=3,
                 stride=1,
                 padding=1,
+                bias=True,
+            ),
+            nn.Conv2d(  # Output refiner.
+                in_channels=math.ceil(self.channels_base / 2),
+                out_channels=1,
+                kernel_size=1,
+                stride=1,
+                padding=0,
                 bias=True,
             ),
         )
