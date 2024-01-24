@@ -160,7 +160,7 @@ def train(
                     clip_grad_n_sched_val = clip_grad_n_sched_val + clip_grad_n_step
                     clip_grad_n_sched_val = min(
                         clip_grad_n_sched_val,
-                        clip_grad_n_sched_min,
+                        clip_grad_n_sched_max,
                     )
                 except NameError:
                     clip_grad_n_step = (
