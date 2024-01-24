@@ -362,7 +362,7 @@ class SelfProjectionDev(nn.Module):
     ) -> torch.FloatTensor:
         projection = torch.zeros(
             [x.shape[0], self.size_projection, self.size_projection]
-        ).to(device=x.device, dtype=torch.float32)
+        ).to(device=x.device, dtype=x.dtype)
 
         rate_i = x.shape[-2] / self.size_projection
         rate_j = x.shape[-1] / self.size_projection
