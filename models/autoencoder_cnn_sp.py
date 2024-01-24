@@ -112,12 +112,27 @@ class Checkerboard(nn.Module):
             return self._to_checkerboard(x)
 
 
+# Dirty hack: nn.Sequential takes only one positional argument.
+class WrappedMaxUnpool2d(nn.Module):
+    def __init__(self, *args, **kwargs) -> None:
+        super(WrappedMaxUnpool2d, self).__init__()
+        self.unpool = nn.MaxUnpool2d(*args, **kwargs)
+
+    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        return self.unpool(x[0], x[1])
+
+
 class AutoencoderCNNSP(nn.Module):
     def __init__(
         self,
         input_size: int,
         network_depth: int,
         scale_factor: int = 2,
+        compressor_depth: int = 1,
+        extractor_depth: int = 1,
+        use_compressor: bool = True,
+        use_extractor: bool = True,
+        baseline: bool = False,
         dev: bool = False,
         sp_params: dict = {},
     ):
@@ -129,9 +144,20 @@ class AutoencoderCNNSP(nn.Module):
         assert (
             scale_factor and (scale_factor & (scale_factor - 1)) == 0
         ), "The 'scale_factor' argument must be a power of 2."
+        assert compressor_depth > 0, "The 'compressor_depth' argument must be positive."
+        assert extractor_depth > 0, "The 'extractor_depth' argument must be positive."
+
+        if baseline:
+            use_compressor = False
+            use_extractor = False
 
         self.sp_class = SelfProjectionDev if dev else SelfProjection
         self.scale_factor = scale_factor
+        self.compressor_depth = compressor_depth
+        self.extractor_depth = extractor_depth
+        self.use_compressor = use_compressor
+        self.use_extractor = use_extractor
+        self.baseline = baseline
 
         encoder_base = input_size
         encoder_dims = [encoder_base]
@@ -166,6 +192,8 @@ class AutoencoderCNNSP(nn.Module):
         self.encoder = nn.Sequential(*encoder)
         self.decoder = nn.Sequential(*decoder)
 
+        self.checkerboard = Checkerboard()
+
         pass
 
     def _create_downsampling_block(
@@ -181,38 +209,81 @@ class AutoencoderCNNSP(nn.Module):
                 kernel_size=3,
                 stride=1,
                 padding=1,
-                bias=False,
+                bias=True,
             ),
+            nn.ReLU(),
             nn.Conv2d(
                 in_channels=8,
                 out_channels=16,
                 kernel_size=3,
                 stride=1,
                 padding=1,
-                bias=False,
+                bias=True,
             ),
+            nn.ReLU(),
             nn.Conv2d(
                 in_channels=16,
                 out_channels=32,
                 kernel_size=4,
                 stride=4,
                 padding=0,
-                bias=False,
+                bias=True,
             ),
+            nn.ReLU(),
             nn.Conv2d(
                 in_channels=32,
                 out_channels=16,
                 kernel_size=1,
                 stride=1,
                 padding=0,
-                bias=False,
+                bias=True,
             ),
-            Checkerboard(),
-            self.sp_class(
-                size_input=[size_input, size_input],
-                size_projection=size_output,
-                **sp_params,
+            nn.ReLU(),
+            (Checkerboard() if not self.baseline else nn.Identity()),
+            (
+                self.sp_class(  # Extractor
+                    size_input=[size_input, size_input],
+                    size_projection=size_input,
+                    **(
+                        sp_params
+                        | dict(
+                            depth=self.extractor_depth,
+                            preserve_distribution=False,
+                            standardize_output=True,
+                            scale_and_bias=False,
+                        )
+                    ),
+                )
+                if self.use_extractor
+                else nn.Identity()
             ),
+            (
+                self.sp_class(  # Compressor
+                    size_input=[size_input, size_input],
+                    size_projection=size_output,
+                    **(
+                        sp_params
+                        | dict(
+                            depth=self.compressor_depth,
+                        )
+                    ),
+                )
+                if self.use_compressor
+                else nn.Identity()
+            ),
+            (  # Baseline
+                nn.Conv2d(
+                    in_channels=16,
+                    out_channels=16,
+                    kernel_size=self.scale_factor,
+                    stride=self.scale_factor,
+                    padding=0,
+                    bias=True,
+                )
+                if self.baseline
+                else nn.Identity()
+            ),
+            (nn.ReLU() if self.baseline else nn.Identity()),  # Baseline
         )
         return block
 
@@ -223,14 +294,57 @@ class AutoencoderCNNSP(nn.Module):
         sp_params: dict = {},
     ) -> nn.Sequential:
         block = nn.Sequential(
-            self.sp_class(
-                size_input=[size_input, size_input],
-                size_projection=size_output,
-                **sp_params,
+            (  # Baseline
+                nn.ConvTranspose2d(
+                    in_channels=16,
+                    out_channels=16,
+                    kernel_size=self.scale_factor,
+                    stride=self.scale_factor,
+                    padding=0,
+                    bias=True,
+                )
+                if self.baseline
+                else nn.Identity()
             ),
-            Checkerboard(
-                reverse=True,
-                channels=16,
+            (nn.ReLU() if self.baseline else nn.Identity()),  # Baseline
+            (
+                self.sp_class(  # Decompressor
+                    size_input=[size_input, size_input],
+                    size_projection=size_output,
+                    **(
+                        sp_params
+                        | dict(
+                            depth=self.compressor_depth,
+                        )
+                    ),
+                )
+                if self.use_compressor
+                else nn.Identity()
+            ),
+            (
+                self.sp_class(  # Extractor
+                    size_input=[size_output, size_output],
+                    size_projection=size_output,
+                    **(
+                        sp_params
+                        | dict(
+                            depth=self.extractor_depth,
+                            preserve_distribution=False,
+                            standardize_output=True,
+                            scale_and_bias=False,
+                        )
+                    ),
+                )
+                if self.use_extractor
+                else nn.Identity()
+            ),
+            (
+                Checkerboard(
+                    reverse=True,
+                    channels=16,
+                )
+                if not self.baseline
+                else nn.Identity()
             ),
             nn.Conv2d(
                 in_channels=16,
@@ -238,31 +352,34 @@ class AutoencoderCNNSP(nn.Module):
                 kernel_size=1,
                 stride=1,
                 padding=0,
-                bias=False,
+                bias=True,
             ),
+            nn.ReLU(),
             nn.ConvTranspose2d(
                 in_channels=32,
                 out_channels=16,
                 kernel_size=4,
                 stride=4,
                 padding=0,
-                bias=False,
+                bias=True,
             ),
+            nn.ReLU(),
             nn.ConvTranspose2d(
                 in_channels=16,
                 out_channels=8,
                 kernel_size=3,
                 stride=1,
                 padding=1,
-                bias=False,
+                bias=True,
             ),
+            nn.ReLU(),
             nn.ConvTranspose2d(
                 in_channels=8,
                 out_channels=1,
                 kernel_size=3,
                 stride=1,
                 padding=1,
-                bias=False,
+                bias=True,
             ),
         )
         return block
@@ -288,6 +405,6 @@ class AutoencoderCNNSP(nn.Module):
         x: torch.FloatTensor,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         x = self.encode(x)
-        latents = x.clone()
+        latents = self.checkerboard(x) if self.baseline else x
         x = self.decode(x)
         return x, latents

@@ -33,7 +33,12 @@ model_class = AutoencoderCNNSP
 model_nn_depth = 1
 
 # Class dependent:
-AutoencoderCNNSP_scale_factor = 4
+AutoencoderCNNSP_scale_factor = 8
+AutoencoderCNNSP_extractor_depth = 1
+AutoencoderCNNSP_compressor_depth = 1
+AutoencoderCNNSP_use_extractor = True
+AutoencoderCNNSP_use_compressor = True
+AutoencoderCNNSP_baseline = False
 
 # Optimization:
 lr = 1.0e-4
@@ -252,6 +257,11 @@ if __name__ == "__main__":
             input_size=tensor_images.shape[1],
             network_depth=model_nn_depth,
             scale_factor=AutoencoderCNNSP_scale_factor,
+            compressor_depth=AutoencoderCNNSP_compressor_depth,
+            extractor_depth=AutoencoderCNNSP_extractor_depth,
+            use_extractor=AutoencoderCNNSP_use_extractor,
+            use_compressor=AutoencoderCNNSP_use_compressor,
+            baseline=AutoencoderCNNSP_baseline,
             dev=dev_mode,
             sp_params=sp_params,
         ).to("cuda")
