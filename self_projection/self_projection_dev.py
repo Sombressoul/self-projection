@@ -10,20 +10,23 @@ from collections.abc import Callable
 class ParametricTanh(nn.Module):
     def __init__(
         self,
-        gamma_min: float = -2.0,
-        gamma_max: float = +2.0,
+        gamma_min: float = +0.1,
+        gamma_max: float = +1.1,
+        std: float = 0.01,
+        use_beta: bool = True,
     ) -> None:
         super(ParametricTanh, self).__init__()
 
+        # The range [+0.1, +1.1] is enough for stability with enforcing of a non-linearity.
         self.gamma_min = gamma_min
         self.gamma_max = gamma_max
 
-        gamma = torch.empty([1])
-        gamma = torch.nn.init.normal_(gamma, mean=0.5, std=0.01)
-        gamma = gamma.clamp(self.gamma_min, self.gamma_max)  # Just in case... \/(o_O)\/
+        beta = torch.empty([1])
+        beta = torch.nn.init.normal_(beta, mean=0.0, std=std)
+        gamma = torch.empty([2])
+        gamma = torch.nn.init.normal_(gamma, mean=0.5, std=std)
+        self.beta = nn.Parameter(beta) if use_beta else 0.0
         self.gamma = nn.Parameter(gamma)
-
-        self._gamma_initial = gamma.item()
 
         self.register_parameter_constraint_hooks()
         pass
@@ -32,7 +35,7 @@ class ParametricTanh(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        return x * (1 - self.gamma) + F.tanh(x) * self.gamma
+        return x * (1 - self.gamma[0]) + F.tanh(x) * self.gamma[1] + self.beta
 
     def enforce_gamma_constraints(self) -> None:
         with torch.no_grad():
@@ -318,7 +321,7 @@ class SelfProjectionDev(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        return nn.init.xavier_uniform_(x, gain=nn.init.calculate_gain("tanh"))
+        return nn.init.xavier_uniform_(x, gain=math.sqrt(2.0) / math.e)  # So be it.
 
     def _initialize(
         self,
@@ -338,7 +341,7 @@ class SelfProjectionDev(nn.Module):
         indices = torch.cat(indices, dim=0)
         partial_x = x.reshape([-1])[indices].view([-1, partial_size])
         # It is better to use .view() above, but that may cause memory access errors.
-        # I have to climb under the hood to do this, but I don't want to. \/(o_O)\/
+        # I have to climb under the hood to fix this, but I don't want to. \/(o_O)\/
         norm_x = partial_x.norm(p="fro", dim=-1, keepdim=True)
         rms_x = norm_x * partial_size ** (-1.0 / 2)
         rms_x = rms_x.view([-1] + [1] * (len(x.shape) - 1))
