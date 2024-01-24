@@ -88,6 +88,9 @@ class SelfProjectionDev(nn.Module):
     ) -> None:
         super(SelfProjectionDev, self).__init__(**kwargs)
 
+        # Initial checks.
+        assert depth > 0, "The 'depth' argument must be a positive integer."
+
         # Define configurable parameters.
         self.size_input = (
             size_input if isinstance(size_input, torch.Size) else torch.Size(size_input)
@@ -356,6 +359,16 @@ class SelfProjectionDev(nn.Module):
         x_std = x.std(dim=[-1, -2], keepdim=True)
         return (x - x_mean) / (x_std + self.eps)
 
+    def _rescale(
+        self,
+        x: torch.Tensor,
+        dim: int = -1,
+    ) -> torch.Tensor:
+        x_min = x.min(dim=dim, keepdim=True).values - self.eps
+        x_max = x.max(dim=dim, keepdim=True).values + self.eps
+        x = (x - x_min) / (x_max - x_min)
+        return x
+
     def forward(
         self,
         x: torch.FloatTensor,
@@ -368,7 +381,7 @@ class SelfProjectionDev(nn.Module):
         rate_j = x.shape[-1] / self.size_projection
         scale = rate_i * rate_j
         x_origin_mean = x.mean(dim=[-1, -2], keepdim=True) * scale
-        x_origin_std = x.std(dim=[-1, -2], keepdim=True) * scale
+        x_origin_std = (x.std(dim=[-1, -2], keepdim=True) + self.eps) * scale
 
         for depth in range(self.depth):
             o_mat_xj = self.mat_original_xj[depth]
@@ -440,12 +453,19 @@ class SelfProjectionDev(nn.Module):
             p_rel_xi_sum = p_rel_xi_buf.sum(dim=-2)
 
             # Calculate feature-rescaling factors.
-            f_scale_j = (o_rel_xj_sum / p_rel_xj_sum).sqrt()
-            f_scale_i = (o_rel_xi_sum / p_rel_xi_sum).sqrt()
+            f_scale_j = (o_rel_xj_sum / (p_rel_xj_sum + self.eps)).sqrt()
+            f_scale_i = (o_rel_xi_sum / (p_rel_xi_sum + self.eps)).sqrt()
 
             # Rescale permuted matrices.
             xj_buf = p_trans_xj_buf * f_scale_j.unsqueeze(-1)
+            xj_buf = self._partial_norm(xj_buf)
             xi_buf = p_trans_xi_buf * f_scale_i.unsqueeze(-1)
+            xi_buf = self._partial_norm(xi_buf)
+
+            if torch.isnan(xj_buf).any() or torch.isnan(xi_buf).any():
+                raise ValueError("NaN in projection matrix.")
+            if torch.isinf(xj_buf).any() or torch.isinf(xi_buf).any():
+                raise ValueError("Inf in projection matrix.")
 
             # Combine, scale and apply initial distribution.
             x_buf = xj_buf * xi_buf.permute([0, -1, -2])
