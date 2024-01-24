@@ -23,10 +23,10 @@ from models import (
 torch.manual_seed(42)
 
 # Data:
-images_path = "data/images_512x512_1024"
+images_path = "data/ae_test_5k_1_1"
 
 # Training:
-epochs = 100
+epochs = 200
 batch_size = 32
 
 # Model:
@@ -36,7 +36,7 @@ debug_model = False
 
 # Class dependent:
 AutoencoderCNNSP_scale_factor = 8
-AutoencoderCNNSP_channels_base = 16
+AutoencoderCNNSP_channels_base = 64
 AutoencoderCNNSP_extractor_depth = 1
 AutoencoderCNNSP_compressor_depth = 1
 AutoencoderCNNSP_use_extractor = True
@@ -44,7 +44,7 @@ AutoencoderCNNSP_use_compressor = True
 AutoencoderCNNSP_baseline = False
 
 # Optimization:
-lr = 1.0e-4
+lr = 1.5e-4
 wd = 1.5e-5
 use_clip_grad_value = False
 clip_grad_value = 1.0
@@ -58,6 +58,7 @@ save_image_nth_batch = 0
 plot_results = False
 
 # Checkpointing:
+dtype = torch.bfloat16
 save_model = True
 save_model_nth_epoch = 100
 load_from_checkpoint = False
@@ -70,7 +71,6 @@ sp_params = dict(
     preserve_distribution=False,
     standardize_output=False,
     scale_and_bias=False,
-    initializer=lambda x: nn.init.xavier_uniform_(x, gain=math.sqrt(2.0 / math.e)),
 )
 
 
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     transform = transforms.Compose([transforms.Grayscale(), transforms.ToTensor()])
     images = load_images_from_folder(images_path, transform)
     tensor_images = (
-        torch.stack(images).squeeze(1).to(dtype=torch.float32, device="cuda")
+        torch.stack(images).squeeze(1).to(dtype=dtype, device="cuda")
     )
 
     assert (
@@ -249,13 +249,13 @@ if __name__ == "__main__":
             network_depth=model_nn_depth,
             dev=dev_mode,
             sp_params=sp_params,
-        ).to("cuda")
+        ).to(dtype).to("cuda")
     elif model_class == SimpleAutoencoderSPSingle:
         model = SimpleAutoencoderSPSingle(
             input_size=tensor_images.shape[1],
             dev=dev_mode,
             sp_params=sp_params,
-        ).to("cuda")
+        ).to(dtype).to("cuda")
     elif model_class == AutoencoderCNNSP:
         model = AutoencoderCNNSP(
             input_size=tensor_images.shape[1],
@@ -269,7 +269,7 @@ if __name__ == "__main__":
             baseline=AutoencoderCNNSP_baseline,
             dev=dev_mode,
             sp_params=sp_params,
-        ).to("cuda")
+        ).to(dtype).to("cuda")
     else:
         raise Exception(f"Unknown model class: {model_class}")
 
@@ -283,6 +283,7 @@ if __name__ == "__main__":
 
     if load_from_checkpoint:
         model = load_model(model, checkpoint_path)
+        model = model.to(dtype).to("cuda")
 
     optimizer = optim.Adam(
         model.parameters(),
