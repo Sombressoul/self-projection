@@ -20,7 +20,7 @@ class ParametricTanh(nn.Module):
 
         gamma = torch.empty([1])
         gamma = torch.nn.init.normal_(gamma, mean=0.5, std=0.01)
-        gamma = gamma.clamp(self.gamma_min, self.gamma_max) # Just in case... \/(o_O)\/
+        gamma = gamma.clamp(self.gamma_min, self.gamma_max)  # Just in case... \/(o_O)\/
         self.gamma = nn.Parameter(gamma)
 
         self._gamma_initial = gamma.item()
@@ -56,6 +56,7 @@ class SelfProjectionDev(nn.Module):
     activation: Callable[[torch.Tensor], torch.Tensor]
     eps: float
     delta: float
+    pnorm_frac: float
 
     # Trainable params.
     mat_original_xj: nn.Parameter
@@ -79,6 +80,7 @@ class SelfProjectionDev(nn.Module):
         activation: Callable[[torch.Tensor], torch.Tensor] = None,
         eps: float = 1e-5,
         delta: float = 5.0e-2,
+        pnorm_frac: float = 0.1,
         **kwargs,
     ) -> None:
         super(SelfProjectionDev, self).__init__(**kwargs)
@@ -98,6 +100,7 @@ class SelfProjectionDev(nn.Module):
         self.activation = activation
         self.eps = eps
         self.delta = delta
+        self.pnorm_frac = pnorm_frac
 
         # Check allowed combinations of parameters.
         assert not all(
@@ -323,6 +326,25 @@ class SelfProjectionDev(nn.Module):
     ) -> torch.Tensor:
         return self.initializer(x)
 
+    def _partial_norm(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        sample_numel = x[0].numel()
+        partial_size = int(sample_numel * self.pnorm_frac)
+        partial_size = 1 if partial_size == 0 else partial_size
+        indices = torch.randint(0, sample_numel, [x.shape[0], partial_size])
+        indices = [indices[i].add_(sample_numel * i) for i in range(indices.shape[0])]
+        indices = torch.cat(indices, dim=0)
+        partial_x = x.reshape([-1])[indices].view([-1, partial_size])
+        # It is better to use .view() above, but that may cause memory access errors.
+        # I have to climb under the hood to do this, but I don't want to. \/(o_O)\/
+        norm_x = partial_x.norm(p="fro", dim=-1, keepdim=True)
+        rms_x = norm_x * partial_size ** (-1.0 / 2)
+        rms_x = rms_x.view([-1] + [1] * (len(x.shape) - 1))
+        x = x / (rms_x + self.eps)
+        return x
+
     def _standardize(
         self,
         x: torch.Tensor,
@@ -376,13 +398,13 @@ class SelfProjectionDev(nn.Module):
                 o_trans_xj_buf, "o_trans_xj_buf", depth
             )
             o_trans_xj_buf = self._activate(o_trans_xj_buf, "o_trans_xj_buf", depth)
-            o_trans_xj_buf = self._standardize(o_trans_xj_buf)
+            o_trans_xj_buf = self._partial_norm(o_trans_xj_buf)
             o_trans_xi_buf = self.dropout(x).permute([0, -1, -2]) @ o_mat_xi
             o_trans_xi_buf = self._scale_and_bias(
                 o_trans_xi_buf, "o_trans_xi_buf", depth
             )
             o_trans_xi_buf = self._activate(o_trans_xi_buf, "o_trans_xi_buf", depth)
-            o_trans_xi_buf = self._standardize(o_trans_xi_buf)
+            o_trans_xi_buf = self._partial_norm(o_trans_xi_buf)
 
             # Transform permuted matrices.
             p_trans_xj_buf = o_trans_xj_buf.permute([0, -1, -2]) @ p_mat_xj
@@ -390,14 +412,14 @@ class SelfProjectionDev(nn.Module):
                 p_trans_xj_buf, "p_trans_xj_buf", depth
             )
             p_trans_xj_buf = self._activate(p_trans_xj_buf, "p_trans_xj_buf", depth)
-            p_trans_xj_buf = self._standardize(p_trans_xj_buf)
+            p_trans_xj_buf = self._partial_norm(p_trans_xj_buf)
             p_trans_xi_buf = o_trans_xi_buf.permute([0, -1, -2]) @ p_mat_xi
             p_trans_xi_buf = self._scale_and_bias(
                 p_trans_xi_buf, "p_trans_xi_buf", depth
             )
             p_trans_xi_buf = p_trans_xi_buf.permute([0, -1, -2])  # permute back
             p_trans_xi_buf = self._activate(p_trans_xi_buf, "p_trans_xi_buf", depth)
-            p_trans_xi_buf = self._standardize(p_trans_xi_buf)
+            p_trans_xi_buf = self._partial_norm(p_trans_xi_buf)
 
             # Compute permuted relation matrices.
             p_rel_xj_buf = p_trans_xj_buf @ p_mat_rel_xj
@@ -442,5 +464,5 @@ class SelfProjectionDev(nn.Module):
 
             # Accumulate values.
             projection = projection.add(x_buf)
-        
+
         return projection
