@@ -10,15 +10,20 @@ from collections.abc import Callable
 class ParametricTanh(nn.Module):
     def __init__(
         self,
-        initial_gamma: float = 0.5,
-        gamma_min: float = 0.0,
-        gamma_max: float = 2.0,
+        gamma_min: float = -2.0,
+        gamma_max: float = +2.0,
     ) -> None:
         super(ParametricTanh, self).__init__()
 
         self.gamma_min = gamma_min
         self.gamma_max = gamma_max
-        self.gamma = nn.Parameter(torch.tensor([initial_gamma]))
+
+        gamma = torch.empty([1])
+        gamma = torch.nn.init.normal_(gamma, mean=0.5, std=0.01)
+        gamma = gamma.clamp(self.gamma_min, self.gamma_max) # Just in case... \/(o_O)\/
+        self.gamma = nn.Parameter(gamma)
+
+        self._gamma_initial = gamma.item()
 
         self.register_parameter_constraint_hooks()
         pass
@@ -310,7 +315,7 @@ class SelfProjectionDev(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        return nn.init.xavier_uniform_(x, gain=nn.init.calculate_gain("relu"))
+        return nn.init.xavier_uniform_(x, gain=nn.init.calculate_gain("tanh"))
 
     def _initialize(
         self,
