@@ -36,16 +36,17 @@ debug_model = False
 
 # Class dependent:
 AutoencoderCNNSP_scale_factor = 8
-AutoencoderCNNSP_channels_base = 64
+AutoencoderCNNSP_channels_base = 32
 AutoencoderCNNSP_extractor_depth = 1
 AutoencoderCNNSP_compressor_depth = 1
 AutoencoderCNNSP_use_extractor = True
 AutoencoderCNNSP_use_compressor = True
 AutoencoderCNNSP_baseline = False
+AutoencoderCNNSP_dropout_rate = 0.1
 
 # Optimization:
 lr = 1.5e-4
-wd = 1.5e-5
+wd = 1.0e-5
 use_clip_grad_value = False
 clip_grad_value = 1.0
 use_clip_grad_norm = False
@@ -55,6 +56,7 @@ clip_grad_norm_type = 2.0
 # Logging/Plotting:
 log_nth_epoch = 1
 save_image_nth_batch = 0
+save_image_nth_epoch = 1
 plot_results = False
 
 # Checkpointing:
@@ -101,7 +103,7 @@ def train(
             optimizer.zero_grad()
             targets = tensor_images[i : i + batch_size]
             outputs, latents = model(targets)
-            loss = F.mse_loss(
+            loss = F.l1_loss(
                 input=outputs,
                 target=targets,
             )
@@ -138,6 +140,9 @@ def train(
         running_loss = running_loss / tensor_images.shape[0]
 
         if epoch % log_nth_epoch == 0:
+            loss_data.append(running_loss)
+
+        if save_image_nth_epoch > 0 and epoch % save_image_nth_epoch == 0:
             log_image(
                 name=f"epoch_{str(epoch)}",
                 image_target=targets[0],
@@ -145,7 +150,6 @@ def train(
                 latents=latents[0],
                 loss=running_loss,
             )
-            loss_data.append(running_loss)
 
         if save_model and epoch % save_model_nth_epoch == 0:
             torch.save(model.state_dict(), f"temp/model_epoch_{str(epoch)}.pth")
@@ -235,41 +239,52 @@ def get_trainable_params_cnt(
 if __name__ == "__main__":
     transform = transforms.Compose([transforms.Grayscale(), transforms.ToTensor()])
     images = load_images_from_folder(images_path, transform)
-    tensor_images = (
-        torch.stack(images).squeeze(1).to(dtype=dtype, device="cuda")
-    )
+    tensor_images = torch.stack(images).squeeze(1).to(dtype=dtype, device="cuda")
 
     assert (
         tensor_images.shape[1] == tensor_images.shape[2]
     ), f"Image shape is not square: {tensor_images.shape}"
 
     if model_class == SimpleAutoencoderSPSP:
-        model = SimpleAutoencoderSPSP(
-            input_size=tensor_images.shape[1],
-            network_depth=model_nn_depth,
-            dev=dev_mode,
-            sp_params=sp_params,
-        ).to(dtype).to("cuda")
+        model = (
+            SimpleAutoencoderSPSP(
+                input_size=tensor_images.shape[1],
+                network_depth=model_nn_depth,
+                dev=dev_mode,
+                sp_params=sp_params,
+            )
+            .to(dtype)
+            .to("cuda")
+        )
     elif model_class == SimpleAutoencoderSPSingle:
-        model = SimpleAutoencoderSPSingle(
-            input_size=tensor_images.shape[1],
-            dev=dev_mode,
-            sp_params=sp_params,
-        ).to(dtype).to("cuda")
+        model = (
+            SimpleAutoencoderSPSingle(
+                input_size=tensor_images.shape[1],
+                dev=dev_mode,
+                sp_params=sp_params,
+            )
+            .to(dtype)
+            .to("cuda")
+        )
     elif model_class == AutoencoderCNNSP:
-        model = AutoencoderCNNSP(
-            input_size=tensor_images.shape[1],
-            network_depth=model_nn_depth,
-            scale_factor=AutoencoderCNNSP_scale_factor,
-            channels_base=AutoencoderCNNSP_channels_base,
-            compressor_depth=AutoencoderCNNSP_compressor_depth,
-            extractor_depth=AutoencoderCNNSP_extractor_depth,
-            use_extractor=AutoencoderCNNSP_use_extractor,
-            use_compressor=AutoencoderCNNSP_use_compressor,
-            baseline=AutoencoderCNNSP_baseline,
-            dev=dev_mode,
-            sp_params=sp_params,
-        ).to(dtype).to("cuda")
+        model = (
+            AutoencoderCNNSP(
+                input_size=tensor_images.shape[1],
+                network_depth=model_nn_depth,
+                scale_factor=AutoencoderCNNSP_scale_factor,
+                channels_base=AutoencoderCNNSP_channels_base,
+                compressor_depth=AutoencoderCNNSP_compressor_depth,
+                extractor_depth=AutoencoderCNNSP_extractor_depth,
+                use_extractor=AutoencoderCNNSP_use_extractor,
+                use_compressor=AutoencoderCNNSP_use_compressor,
+                baseline=AutoencoderCNNSP_baseline,
+                dropout_rate=AutoencoderCNNSP_dropout_rate,
+                dev=dev_mode,
+                sp_params=sp_params,
+            )
+            .to(dtype)
+            .to("cuda")
+        )
     else:
         raise Exception(f"Unknown model class: {model_class}")
 

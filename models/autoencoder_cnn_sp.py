@@ -134,6 +134,7 @@ class AutoencoderCNNSP(nn.Module):
         use_compressor: bool = True,
         use_extractor: bool = True,
         baseline: bool = False,
+        dropout_rate: float = 0.1,
         dev: bool = False,
         sp_params: dict = {},
     ):
@@ -163,6 +164,7 @@ class AutoencoderCNNSP(nn.Module):
         self.use_compressor = use_compressor
         self.use_extractor = use_extractor
         self.baseline = baseline
+        self.dropout_rate = dropout_rate
 
         # Internal parameters.
         self.sp_class = SelfProjectionDev if dev else SelfProjection
@@ -223,6 +225,9 @@ class AutoencoderCNNSP(nn.Module):
                 bias=True,
             ),
             nn.ReLU(),
+            nn.BatchNorm2d(
+                num_features=self.channels_base,
+            ),
             nn.Conv2d(
                 in_channels=self.channels_base,
                 out_channels=self.channels_base * 2,
@@ -232,6 +237,9 @@ class AutoencoderCNNSP(nn.Module):
                 bias=True,
             ),
             nn.ReLU(),
+            nn.BatchNorm2d(
+                num_features=self.channels_base * 2,
+            ),
             nn.Conv2d(
                 in_channels=self.channels_base * 2,
                 out_channels=self.channels_base * 4,
@@ -241,6 +249,10 @@ class AutoencoderCNNSP(nn.Module):
                 bias=True,
             ),
             nn.ReLU(),
+            nn.BatchNorm2d(
+                num_features=self.channels_base * 4,
+            ),
+            nn.Dropout(p=self.dropout_rate),
             (
                 nn.Conv2d(
                     in_channels=self.channels_base * 4,
@@ -254,6 +266,13 @@ class AutoencoderCNNSP(nn.Module):
                 else nn.Identity()
             ),
             (nn.ReLU() if not self.baseline else nn.Identity()),
+            (
+                nn.BatchNorm2d(
+                    num_features=self.scale_factor**2,
+                )
+                if not self.baseline
+                else nn.Identity()
+            ),
             (Checkerboard() if not self.baseline else nn.Identity()),
             (
                 self.sp_class(  # Extractor
@@ -362,6 +381,13 @@ class AutoencoderCNNSP(nn.Module):
                 else nn.Identity()
             ),
             (
+                nn.BatchNorm2d(
+                    num_features=self.scale_factor**2,
+                )
+                if not self.baseline
+                else nn.Identity()
+            ),
+            (
                 nn.Conv2d(
                     in_channels=self.scale_factor**2,
                     out_channels=self.channels_base * 4,
@@ -374,6 +400,10 @@ class AutoencoderCNNSP(nn.Module):
                 else nn.Identity()
             ),
             (nn.ReLU() if not self.baseline else nn.Identity()),
+            nn.BatchNorm2d(
+                num_features=self.channels_base * 4,
+            ),
+            nn.Dropout(p=self.dropout_rate),
             nn.ConvTranspose2d(
                 in_channels=self.channels_base * 4,
                 out_channels=self.channels_base * 2,
@@ -383,6 +413,9 @@ class AutoencoderCNNSP(nn.Module):
                 bias=True,
             ),
             nn.ReLU(),
+            nn.BatchNorm2d(
+                num_features=self.channels_base * 2,
+            ),
             nn.ConvTranspose2d(
                 in_channels=self.channels_base * 2,
                 out_channels=self.channels_base,
@@ -392,6 +425,9 @@ class AutoencoderCNNSP(nn.Module):
                 bias=True,
             ),
             nn.ReLU(),
+            nn.BatchNorm2d(
+                num_features=self.channels_base,
+            ),
             nn.ConvTranspose2d(
                 in_channels=self.channels_base,
                 out_channels=math.ceil(self.channels_base / 2),
@@ -399,6 +435,9 @@ class AutoencoderCNNSP(nn.Module):
                 stride=1,
                 padding=1,
                 bias=True,
+            ),
+            nn.BatchNorm2d(
+                num_features=math.ceil(self.channels_base / 2),
             ),
             nn.Conv2d(  # Output refiner.
                 in_channels=math.ceil(self.channels_base / 2),
