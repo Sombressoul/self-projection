@@ -20,14 +20,14 @@ from models import (
 # ____________________________> Config.
 # ================================================================================= #
 # Seeding:
-torch.manual_seed(42)
+torch.manual_seed(1337)
 
 # Data:
-images_path = "data/ae_test_5k_1_1"
+images_path = "data/ae_test_5k_2_1"
 
 # Training:
-epochs = 200
-batch_size = 32
+epochs = 500
+batch_size = 16
 
 # Model:
 model_class = AutoencoderCNNSP
@@ -37,8 +37,8 @@ debug_model = False
 # Class dependent:
 AutoencoderCNNSP_scale_factor = 8
 AutoencoderCNNSP_channels_base = 32
-AutoencoderCNNSP_extractor_depth = 1
-AutoencoderCNNSP_compressor_depth = 1
+AutoencoderCNNSP_extractor_depth = 2
+AutoencoderCNNSP_compressor_depth = 2
 AutoencoderCNNSP_use_extractor = True
 AutoencoderCNNSP_use_compressor = True
 AutoencoderCNNSP_baseline = False
@@ -46,15 +46,20 @@ AutoencoderCNNSP_dropout_rate = 0.1
 
 # Optimization:
 warmup_steps = 768
-learning_rate_start = 1.0e-12
+learning_rate_start = 1.0e-9
 learning_rate_end = 1.5e-4
 weight_decay = 1.0e-2
 use_amsgrad = True
 use_clip_grad_value = False
 clip_grad_value = 1.0
-use_clip_grad_norm = True
+use_clip_grad_norm = False
 clip_grad_norm_max = 1.0
-clip_grad_norm_type = 2.0 # L2
+clip_grad_norm_type = 2.0  # L2
+use_clip_grad_n_sched = True
+clip_grad_n_sched_min = 1.0e-3
+clip_grad_n_sched_max = 1.0
+clip_grad_n_sched_steps = 1024
+clip_grad_n_sched_type = 2.0
 
 # Logging/Plotting:
 log_nth_epoch = 1
@@ -123,9 +128,22 @@ def train(
                     loss=running_loss / (i + batch_size),
                 )
 
-            assert not all(
-                [use_clip_grad_value, use_clip_grad_norm]
-            ), "Only one of clip_grad_value or clip_grad_norm can be used"
+            assert (
+                sum(
+                    [
+                        int(use_clip_grad_value),
+                        int(use_clip_grad_norm),
+                        int(use_clip_grad_n_sched),
+                    ]
+                )
+                < 2
+            ), "".join(
+                [
+                    "Only one of the following options can be used: ",
+                    "use_clip_grad_value, use_clip_grad_norm, ",
+                    "use_clip_grad_norm_scheduled",
+                ]
+            )
 
             if use_clip_grad_value:
                 nn.utils.clip_grad_value_(
@@ -137,6 +155,24 @@ def train(
                     parameters=model.parameters(),
                     max_norm=clip_grad_norm_max,
                     norm_type=clip_grad_norm_type,
+                )
+            if use_clip_grad_n_sched:
+                try:
+                    clip_grad_n_sched_val = clip_grad_n_sched_val + clip_grad_n_step
+                    clip_grad_n_sched_val = min(
+                        clip_grad_n_sched_val,
+                        clip_grad_n_sched_min,
+                    )
+                except NameError:
+                    clip_grad_n_step = (
+                        clip_grad_n_sched_max - clip_grad_n_sched_min
+                    ) / clip_grad_n_sched_steps
+                    clip_grad_n_sched_val = clip_grad_n_sched_min
+                
+                nn.utils.clip_grad_norm_(
+                    parameters=model.parameters(),
+                    max_norm=clip_grad_n_sched_val,
+                    norm_type=clip_grad_n_sched_type,
                 )
 
             optimizer.step()
