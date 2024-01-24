@@ -1,4 +1,5 @@
 import os
+import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -31,9 +32,11 @@ batch_size = 32
 # Model:
 model_class = AutoencoderCNNSP
 model_nn_depth = 1
+debug_model = False
 
 # Class dependent:
 AutoencoderCNNSP_scale_factor = 8
+AutoencoderCNNSP_channels_base = 16
 AutoencoderCNNSP_extractor_depth = 1
 AutoencoderCNNSP_compressor_depth = 1
 AutoencoderCNNSP_use_extractor = True
@@ -67,6 +70,7 @@ sp_params = dict(
     preserve_distribution=False,
     standardize_output=False,
     scale_and_bias=False,
+    initializer=lambda x: nn.init.xavier_uniform_(x, gain=math.sqrt(2.0 / math.e)),
 )
 
 
@@ -257,6 +261,7 @@ if __name__ == "__main__":
             input_size=tensor_images.shape[1],
             network_depth=model_nn_depth,
             scale_factor=AutoencoderCNNSP_scale_factor,
+            channels_base=AutoencoderCNNSP_channels_base,
             compressor_depth=AutoencoderCNNSP_compressor_depth,
             extractor_depth=AutoencoderCNNSP_extractor_depth,
             use_extractor=AutoencoderCNNSP_use_extractor,
@@ -267,6 +272,14 @@ if __name__ == "__main__":
         ).to("cuda")
     else:
         raise Exception(f"Unknown model class: {model_class}")
+
+    if debug_model:
+        model_params = get_trainable_params_cnt(model)
+        print("DEBUG INFO:")
+        print(f"Model class: {model.__class__.__name__}")
+        print(f"Total number of trainable parameters: {model_params}")
+        print(model)
+        exit()
 
     if load_from_checkpoint:
         model = load_model(model, checkpoint_path)

@@ -17,9 +17,9 @@ class Checkerboard(nn.Module):
             assert (
                 channels is not None
             ), "The 'channels' argument must be specified when 'reverse' is True."
-            assert not (
-                channels & (channels - 1)
-            ), "The 'channels' argument must be a power of 2."
+            assert (
+                math.sqrt(channels) % 1 == 0
+            ), "The 'channels' argument must be equal to a power of an integer."
 
         self.reverse = reverse
         self.channels = channels
@@ -30,9 +30,9 @@ class Checkerboard(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        if x.shape[1] & (x.shape[1] - 1):
-            raise ValueError("The 'blocks' dimension must be a power of 2.")
-
+        if math.sqrt(x.shape[1]) % 1 != 0:
+            raise ValueError("The number of channels must be a power of an integer.")
+        
         num_blocks_side = int(math.sqrt(x.shape[1]))
 
         x_reshaped = x.view(
@@ -128,6 +128,7 @@ class AutoencoderCNNSP(nn.Module):
         input_size: int,
         network_depth: int,
         scale_factor: int = 2,
+        channels_base: int = 16,
         compressor_depth: int = 1,
         extractor_depth: int = 1,
         use_compressor: bool = True,
@@ -140,6 +141,9 @@ class AutoencoderCNNSP(nn.Module):
 
         scale_factor = int(scale_factor)
 
+        if network_depth > 1:
+            raise NotImplementedError("The 'network_depth' argument must be 1 for now.")
+
         assert scale_factor > 0, "The 'scale_factor' argument must be positive."
         assert (
             scale_factor and (scale_factor & (scale_factor - 1)) == 0
@@ -151,14 +155,19 @@ class AutoencoderCNNSP(nn.Module):
             use_compressor = False
             use_extractor = False
 
-        self.sp_class = SelfProjectionDev if dev else SelfProjection
+        # External parameters.
         self.scale_factor = scale_factor
+        self.channels_base = channels_base
         self.compressor_depth = compressor_depth
         self.extractor_depth = extractor_depth
         self.use_compressor = use_compressor
         self.use_extractor = use_extractor
         self.baseline = baseline
 
+        # Internal parameters.
+        self.sp_class = SelfProjectionDev if dev else SelfProjection
+        self.baseline_bottleneck_c = math.ceil(math.sqrt(self.scale_factor * self.channels_base * 4))**2
+        
         encoder_base = input_size
         encoder_dims = [encoder_base]
         for _ in range(network_depth):
@@ -205,7 +214,7 @@ class AutoencoderCNNSP(nn.Module):
         block = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
-                out_channels=8,
+                out_channels=self.channels_base,
                 kernel_size=3,
                 stride=1,
                 padding=1,
@@ -213,8 +222,8 @@ class AutoencoderCNNSP(nn.Module):
             ),
             nn.ReLU(),
             nn.Conv2d(
-                in_channels=8,
-                out_channels=16,
+                in_channels=self.channels_base,
+                out_channels=self.channels_base * 2,
                 kernel_size=3,
                 stride=1,
                 padding=1,
@@ -222,23 +231,27 @@ class AutoencoderCNNSP(nn.Module):
             ),
             nn.ReLU(),
             nn.Conv2d(
-                in_channels=16,
-                out_channels=32,
-                kernel_size=4,
-                stride=4,
+                in_channels=self.channels_base * 2,
+                out_channels=self.channels_base * 4,
+                kernel_size=self.scale_factor,
+                stride=self.scale_factor,
                 padding=0,
                 bias=True,
             ),
             nn.ReLU(),
-            nn.Conv2d(
-                in_channels=32,
-                out_channels=16,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                bias=True,
+            (
+                nn.Conv2d(
+                    in_channels=self.channels_base * 4,
+                    out_channels=self.scale_factor**2,
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                    bias=True,
+                )
+                if not self.baseline
+                else nn.Identity()
             ),
-            nn.ReLU(),
+            (nn.ReLU() if not self.baseline else nn.Identity()),
             (Checkerboard() if not self.baseline else nn.Identity()),
             (
                 self.sp_class(  # Extractor
@@ -273,8 +286,8 @@ class AutoencoderCNNSP(nn.Module):
             ),
             (  # Baseline
                 nn.Conv2d(
-                    in_channels=16,
-                    out_channels=16,
+                    in_channels=self.channels_base * 4,
+                    out_channels=self.baseline_bottleneck_c,
                     kernel_size=self.scale_factor,
                     stride=self.scale_factor,
                     padding=0,
@@ -296,8 +309,8 @@ class AutoencoderCNNSP(nn.Module):
         block = nn.Sequential(
             (  # Baseline
                 nn.ConvTranspose2d(
-                    in_channels=16,
-                    out_channels=16,
+                    in_channels=self.baseline_bottleneck_c,
+                    out_channels=self.channels_base * 4,
                     kernel_size=self.scale_factor,
                     stride=self.scale_factor,
                     padding=0,
@@ -306,7 +319,7 @@ class AutoencoderCNNSP(nn.Module):
                 if self.baseline
                 else nn.Identity()
             ),
-            (nn.ReLU() if self.baseline else nn.Identity()),  # Baseline
+            (nn.ReLU() if self.baseline else nn.Identity()),
             (
                 self.sp_class(  # Decompressor
                     size_input=[size_input, size_input],
@@ -341,32 +354,36 @@ class AutoencoderCNNSP(nn.Module):
             (
                 Checkerboard(
                     reverse=True,
-                    channels=16,
+                    channels=self.scale_factor**2,
                 )
                 if not self.baseline
                 else nn.Identity()
             ),
-            nn.Conv2d(
-                in_channels=16,
-                out_channels=32,
-                kernel_size=1,
-                stride=1,
+            (
+                nn.Conv2d(
+                    in_channels=self.scale_factor**2,
+                    out_channels=self.channels_base * 4,
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                    bias=True,
+                )
+                if not self.baseline
+                else nn.Identity()
+            ),
+            (nn.ReLU() if not self.baseline else nn.Identity()),
+            nn.ConvTranspose2d(
+                in_channels=self.channels_base * 4,
+                out_channels=self.channels_base * 2,
+                kernel_size=self.scale_factor,
+                stride=self.scale_factor,
                 padding=0,
                 bias=True,
             ),
             nn.ReLU(),
             nn.ConvTranspose2d(
-                in_channels=32,
-                out_channels=16,
-                kernel_size=4,
-                stride=4,
-                padding=0,
-                bias=True,
-            ),
-            nn.ReLU(),
-            nn.ConvTranspose2d(
-                in_channels=16,
-                out_channels=8,
+                in_channels=self.channels_base * 2,
+                out_channels=self.channels_base,
                 kernel_size=3,
                 stride=1,
                 padding=1,
@@ -374,7 +391,7 @@ class AutoencoderCNNSP(nn.Module):
             ),
             nn.ReLU(),
             nn.ConvTranspose2d(
-                in_channels=8,
+                in_channels=self.channels_base,
                 out_channels=1,
                 kernel_size=3,
                 stride=1,
