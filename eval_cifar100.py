@@ -19,17 +19,15 @@ from self_projection import SelfProjectionDev as SelfProjection
 class ExperimentalModel(nn.Module):
     def __init__(
         self,
+        depth: int = 1,
     ):
         super(ExperimentalModel, self).__init__()
-        self.self_projection_a = SelfProjection(
+        self.self_projection = SelfProjection(
             size_input=(96, 32),
-            size_projection=32,
-        )
-        self.self_projection_b = SelfProjection(
-            size_input=(32, 32),
             size_projection=16,
+            depth=depth,
         )
-        self.activation = nn.ReLU()
+        self.lnorm = nn.LayerNorm(16**2)
         self.fc = nn.Linear(16**2, 100)
         self.log_softmax = nn.LogSoftmax(dim=1)
         pass
@@ -39,11 +37,9 @@ class ExperimentalModel(nn.Module):
         x: torch.Tensor,
     ):
         x = x.view([-1, 96, 32])
-        x = self.self_projection_a(x)
-        x = self.activation(x)
-        x = self.self_projection_b(x)
-        x = self.activation(x)
+        x = self.self_projection(x)
         x = x.flatten(1)
+        x = self.lnorm(x)
         x = self.fc(x)
         x = self.log_softmax(x)
         return x
