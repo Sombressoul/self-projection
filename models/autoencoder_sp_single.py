@@ -8,7 +8,6 @@ class SimpleAutoencoderSPSingle(nn.Module):
     def __init__(
         self,
         input_size: int,
-        self_projection_depth: int = 8,
         dev: bool = False,
         sp_params: dict = {},
     ):
@@ -19,7 +18,6 @@ class SimpleAutoencoderSPSingle(nn.Module):
         self.self_projection = self.sp_class(
             size_input=[input_size, input_size],
             size_projection=input_size,
-            depth=self_projection_depth,
             **sp_params,
         )
 

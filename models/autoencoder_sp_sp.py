@@ -9,8 +9,8 @@ class SimpleAutoencoderSPSP(nn.Module):
         self,
         input_size: int,
         network_depth: 3,
-        self_projection_depth: int = 8,
         dev: bool = False,
+        sp_params: dict = {},
     ):
         super(SimpleAutoencoderSPSP, self).__init__()
 
@@ -28,7 +28,7 @@ class SimpleAutoencoderSPSP(nn.Module):
                 self.sp_class(
                     size_input=[dims[depth_id]] * 2,
                     size_projection=dims[depth_id + 1],
-                    depth=self_projection_depth,
+                    **sp_params,
                 ),
             )
             encoder.append(nn.LayerNorm([dims[depth_id + 1]] * 2))
@@ -41,7 +41,7 @@ class SimpleAutoencoderSPSP(nn.Module):
                 self.sp_class(
                     size_input=[dims[depth_id + 1]] * 2,
                     size_projection=dims[depth_id],
-                    depth=self_projection_depth,
+                    **sp_params,
                 ),
             )
             if depth_id > 0:
