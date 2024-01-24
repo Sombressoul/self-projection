@@ -48,7 +48,8 @@ AutoencoderCNNSP_dropout_rate = 0.1
 warmup_steps = 768
 learning_rate_start = 1.0e-12
 learning_rate_end = 1.5e-4
-weight_decay = 1.0e-5
+weight_decay = 1.0e-2
+use_amsgrad = True
 use_clip_grad_value = False
 clip_grad_value = 1.0
 use_clip_grad_norm = True
@@ -304,10 +305,11 @@ if __name__ == "__main__":
         model = load_model(model, checkpoint_path)
         model = model.to(dtype).to("cuda")
 
-    optimizer = optim.Adam(
+    optimizer = optim.AdamW(
         model.parameters(),
         lr=learning_rate_start,
         weight_decay=weight_decay,
+        amsgrad=use_amsgrad,
     )
 
     scheduler_warmup = optim.lr_scheduler.CosineAnnealingLR(
