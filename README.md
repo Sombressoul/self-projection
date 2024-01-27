@@ -5,9 +5,7 @@
   - [Installation](#installation)
   - [Usage](#usage)
   - [Evaluation](#evaluation)
-    - [Experimental Setup and Results (outdated since 20.01.2024)](#experimental-setup-and-results-outdated-since-20012024)
-    - [Insights](#insights)
-    - [Future Directions](#future-directions)
+  - [Future Directions](#future-directions)
   - [Contribution](#contribution)
 
 ## Overview
@@ -66,47 +64,11 @@ print(relations.shape)
 
 ## Evaluation
 
-The `SelfProjection` module has been comprehensively evaluated using the MNIST dataset under various controlled conditions. These evaluations aim to assess its spatial feature extraction efficiency and overall model performance.
+(deleted as outdated since 20.01.2024)
 
-[eval_mnist.py](eval_mnist.py) - contains an evaluation code for MNIST dataset. By default it is set to extreme conditions with heavy projection reduction (4x4), high dropout rate at projection level (0.75) and extreme dropout rate at input level (0.9).
+Pending.
 
-### Experimental Setup and Results (outdated since 20.01.2024)
-
-Three distinct experimental setups were employed, each with specific configurations of projection size and dropout rates:
-
-1. **Standard Conditions**:
-   - **Configuration**: Projection size of 8x8, input dropout rate of 0.0, and projection dropout rate of 0.25.
-   - **Command**:
-    ```bash
-    python eval_mnist.py --seed=1 --p-size=8 --dropout-rate-i=0.0 --dropout-rate-p=0.25 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
-    ```
-   - **Results**: Achieved an average loss of 0.1484 and an accuracy of 95% (9544/10000) on the test set.
-   - **Analysis**: This performance under standard conditions demonstrates the module's effectiveness in capturing essential features necessary for high accuracy in digit classification.
-
-2. **Heavy Reduction with High Dropout**:
-   - **Configuration**: Projection size of 4x4, input dropout rate of 0.0, and projection dropout rate of 0.75.
-   - **Command**:
-    ```bash
-    python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.0 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
-    ```
-   - **Results**: Achieved an average loss of 0.7027 and an accuracy of 79% (7919/10000) on the test set.
-   - **Analysis**: The model shows resilience and robust feature extraction capability even with substantial dimensionality reduction and high dropout, though with a noticeable decrease in accuracy compared to the standard setup.
-
-3. **Heavy Reduction with High Dropout of Projection and Extreme Dropout of Input**:
-   - **Configuration**: Projection size of 4x4, input dropout rate of 0.9, and projection dropout rate of 0.75.
-   - **Command**:
-    ```bash
-    python eval_mnist.py --seed=1 --p-size=4 --dropout-rate-i=0.9 --dropout-rate-p=0.75 --batch-size=64 --epochs=10 --lr=1.0 --gamma=0.7
-    ```
-   - **Results**: Achieved an average loss of 1.1053 and an accuracy of 69% (6868/10000) on the test set.
-   - **Analysis**: Under these extreme conditions, the model still performs significantly above chance level, indicating the `SelfProjection` module's ability to extract meaningful features from highly sparse data, albeit with a reduction in overall performance.
-
-
-### Insights
-
-These varied evaluations illustrate the `SelfProjection` module's capability to adapt and extract meaningful features across a range of scenarios. The results under different projection sizes and dropout rates provide valuable insights into the module's potential applicability in tasks requiring nuanced data representation and processing. The module demonstrates robustness in feature extraction, especially notable under the heavy reduction and high dropout conditions.
-
-### Future Directions
+## Future Directions
 
 The ongoing development of the `SelfProjection` module is a component of a personal endeavor in the field of machine learning. Future plans include conducting experiments with more complex datasets to further assess and refine the module's capabilities. These steps are aimed at exploring a broader range of applications and enhancing the module's performance in diverse settings.
 
