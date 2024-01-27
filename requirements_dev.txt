@@ -1,3 +1,0 @@
-pillow==10.2
-matplotlib==3.8.2
-madgrad==1.3
