@@ -3,7 +3,7 @@ from distutils.core import setup
 
 from pathlib import Path
 
-__VERSION__ = "0.1.0"
+__VERSION__ = "0.2.0"
 
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
