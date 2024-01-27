@@ -1,21 +1,18 @@
 import torch
 import torch.nn as nn
 
-from self_projection import SelfProjection, SelfProjectionDev
+from modules.self_projection import SelfProjection
 
 
 class SimpleAutoencoderSPSingle(nn.Module):
     def __init__(
         self,
         input_size: int,
-        dev: bool = False,
         sp_params: dict = {},
     ):
         super(SimpleAutoencoderSPSingle, self).__init__()
 
-        self.sp_class = SelfProjectionDev if dev else SelfProjection
-
-        self.self_projection = self.sp_class(
+        self.self_projection = SelfProjection(
             size_input=[input_size, input_size],
             size_projection=input_size,
             **sp_params,
@@ -27,4 +24,6 @@ class SimpleAutoencoderSPSingle(nn.Module):
         self,
         x: torch.FloatTensor,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
-        return self.self_projection(x), torch.zeros([x.shape[0], 16, 16]).to(x.device, x.dtype)
+        return self.self_projection(x), torch.zeros([x.shape[0], 16, 16]).to(
+            x.device, x.dtype
+        )

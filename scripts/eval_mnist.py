@@ -1,4 +1,6 @@
 # Originated from: https://github.com/pytorch/examples/blob/main/mnist/main.py
+import os
+import sys
 import argparse
 import torch
 import torch.nn as nn
@@ -7,28 +9,37 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
-# from self_projection import SelfProjection
-from self_projection import SelfProjectionDev as SelfProjection
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(script_dir))
+
+from modules.self_projection import SelfProjection
 
 
-# Experimental model.
-#
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=-1 --sp-depth=4
-
-
-class ExperimentalModel(nn.Module):
+class Net(nn.Module):
     def __init__(
         self,
+        p_size: int,
+        dropout_rate_i: float,
+        dropout_rate_p: float,
         depth: int = 1,
     ):
-        super(ExperimentalModel, self).__init__()
+        super(Net, self).__init__()
+
+        print("Test-model parameters:")
+        print(f"Projection size: {p_size}")
+        print(f"Dropout rate input: {dropout_rate_i}")
+        print(f"Dropout rate projection: {dropout_rate_p}")
+
+        self.dropout_input = nn.Dropout(dropout_rate_i)
         self.self_projection = SelfProjection(
-            size_input=(96, 32),
-            size_projection=16,
+            size_input=(28, 28),
+            size_projection=p_size,
             depth=depth,
         )
-        self.lnorm = nn.LayerNorm(16**2)
-        self.fc = nn.Linear(16**2, 100)
+        self.dropout_projection = nn.Dropout(dropout_rate_p)
+        self.activation = nn.Tanh()
+        self.linear_consolidate = nn.Linear(p_size**2, p_size**2)
+        self.linear_interpretate = nn.Linear(p_size**2, 10)
         self.log_softmax = nn.LogSoftmax(dim=1)
         pass
 
@@ -36,93 +47,15 @@ class ExperimentalModel(nn.Module):
         self,
         x: torch.Tensor,
     ):
-        x = x.view([-1, 96, 32])
-        x = self.self_projection(x)
-        x = x.flatten(1)
-        x = self.lnorm(x)
-        x = self.fc(x)
-        x = self.log_softmax(x)
-        return x
-
-
-# Model for evaluation: SelfProjection
-#
-# SelfProjection depth -> 1
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=1
-# Total number of trainable parameters: 31844
-# Test set: Average loss: 3.0497, Accuracy: 2736/10000 (27%)
-# Dev version results:
-# Test set: Average loss: 3.0085, Accuracy: 2771/10000 (28%)
-#
-# SelfProjection depth -> 4
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=4
-# Total number of trainable parameters: 44132
-# Test set: Average loss: 3.0691, Accuracy: 2690/10000 (27%)
-# Dev version results:
-# Test set: Average loss: 3.0389, Accuracy: 2695/10000 (27%)
-
-
-class NetSP(nn.Module):
-    def __init__(
-        self,
-        depth: int = 1,
-    ):
-        super(NetSP, self).__init__()
-        self.self_projection = SelfProjection(
-            size_input=(96, 32),
-            size_projection=16,
-            depth=depth,
-        )
-        self.activation = nn.ReLU()
-        self.fc = nn.Linear(16**2, 100)
-        self.log_softmax = nn.LogSoftmax(dim=1)
-        pass
-
-    def forward(
-        self,
-        x: torch.Tensor,
-    ):
-        x = x.view([-1, 96, 32])
+        x = x.squeeze(1)
+        x = self.dropout_input(x)
         x = self.self_projection(x)
         x = self.activation(x)
+        x = self.dropout_projection(x)
         x = x.flatten(1)
-        x = self.fc(x)
-        x = self.log_softmax(x)
-        return x
-
-
-# Model for evaluation: reference
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=1
-# Total number of trainable parameters: 30920
-# Test set: Average loss: 3.0622, Accuracy: 2773/10000 (28%)
-class NetCNN(nn.Module):
-    def __init__(
-        self,
-    ):
-        super(NetCNN, self).__init__()
-        self.conv_a = nn.Conv2d(3, 16, 3, 1, 1)
-        self.pooling_a = nn.MaxPool2d(2, 2)
-        self.conv_b = nn.Conv2d(16, 32, 3, 1, 1)
-        self.pooling_b = nn.MaxPool2d(2, 2)
-        self.conv_reductor = nn.Conv2d(32, 4, 1, 1, 0)
-        self.relu = nn.ReLU()
-        self.fc = nn.Linear(4 * 8 * 8, 100)
-        self.log_softmax = nn.LogSoftmax(dim=1)
-        pass
-
-    def forward(
-        self,
-        x: torch.Tensor,
-    ):
-        x = self.conv_a(x)
-        x = self.relu(x)
-        x = self.pooling_a(x)
-        x = self.conv_b(x)
-        x = self.relu(x)
-        x = self.pooling_b(x)
-        x = self.conv_reductor(x)
-        x = x.flatten(1)
-        x = self.fc(x)
+        x = self.linear_consolidate(x)
+        x = self.activation(x)
+        x = self.linear_interpretate(x)
         x = self.log_softmax(x)
         return x
 
@@ -180,7 +113,7 @@ def test(model, device, test_loader):
 
 def main():
     # Training settings
-    parser = argparse.ArgumentParser(description="SelfProjection CIFAR-100 evaluation")
+    parser = argparse.ArgumentParser(description="SelfProjection MNIST evaluation")
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -205,23 +138,16 @@ def main():
     parser.add_argument(
         "--lr",
         type=float,
-        default=1.0e-3,
+        default=1.0,
         metavar="LR",
-        help="learning rate (default: 1.0e-3)",
-    )
-    parser.add_argument(
-        "--wd",
-        type=float,
-        default=1.0e-5,
-        metavar="WD",
-        help="Weight decay (default: 1.0e-5)",
+        help="learning rate (default: 1.0)",
     )
     parser.add_argument(
         "--gamma",
         type=float,
-        default=1.0,
+        default=0.7,
         metavar="M",
-        help="Learning rate step gamma (default: 1.0 - constant)",
+        help="Learning rate step gamma (default: 0.7)",
     )
     parser.add_argument(
         "--no-cuda", action="store_true", default=False, help="disables CUDA training"
@@ -249,22 +175,34 @@ def main():
         help="how many batches to wait before logging training status",
     )
     parser.add_argument(
-        "--model",
+        "--save-model",
+        action="store_true",
+        default=False,
+        help="For Saving the current Model",
+    )
+    parser.add_argument(
+        "--p-size",
         type=int,
-        default=0,
-        help="model type: 0 - SP, 1 - CNN, -1 - experimental (default: 0)",
+        default=4,
+        help="SelfProjection size",
+    )
+    parser.add_argument(
+        "--dropout-rate-i",
+        type=float,
+        default=0.90,
+        help="Input dropout rate",
+    )
+    parser.add_argument(
+        "--dropout-rate-p",
+        type=float,
+        default=0.75,
+        help="Projection dropout rate",
     )
     parser.add_argument(
         "--sp-depth",
         type=int,
         default=1,
         help="SelfProjection depth (default: 1)",
-    )
-    parser.add_argument(
-        "--save-model",
-        action="store_true",
-        default=False,
-        help="For Saving the current Model",
     )
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -286,29 +224,27 @@ def main():
         train_kwargs.update(cuda_kwargs)
         test_kwargs.update(cuda_kwargs)
 
-    transform = transforms.Compose([transforms.ToTensor()])
-    dataset1 = datasets.CIFAR100(
-        "./data", train=True, download=True, transform=transform
+    transform = transforms.Compose(
+        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     )
-    dataset2 = datasets.CIFAR100("./data", train=False, transform=transform)
+    dataset1 = datasets.MNIST("./data", train=True, download=True, transform=transform)
+    dataset2 = datasets.MNIST("./data", train=False, transform=transform)
     train_loader = torch.utils.data.DataLoader(dataset1, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
-    if args.model == 0:
-        model = NetSP(depth=args.sp_depth).to(device)
-    elif args.model == 1:
-        model = NetCNN().to(device)
-    elif args.model == -1:
-        model = ExperimentalModel().to(device)
-    else:
-        raise "Unknown model type."
+    model = Net(
+        p_size=args.p_size,
+        dropout_rate_i=args.dropout_rate_i,
+        dropout_rate_p=args.dropout_rate_p,
+        depth=args.sp_depth,
+    ).to(device)
 
     total_trainable_params = sum(
         p.numel() for p in model.parameters() if p.requires_grad
     )
     print(f"Total number of trainable parameters: {total_trainable_params}")
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
+    optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
@@ -317,7 +253,7 @@ def main():
         scheduler.step()
 
     if args.save_model:
-        torch.save(model.state_dict(), "model_cifar100.pt")
+        torch.save(model.state_dict(), "model_mnist.pt")
 
 
 if __name__ == "__main__":

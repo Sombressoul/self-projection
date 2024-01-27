@@ -1,12 +1,17 @@
+import os
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from self_projection import SelfProjection
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(script_dir))
+
+from modules.self_projection import SelfProjection
 
 # seeding
-torch.manual_seed(1337)
+torch.manual_seed(1)
 
 depth = 1
 input_shape = [96, 16]
@@ -45,8 +50,8 @@ class Net(nn.Module):
         x: torch.Tensor,
     ):
         x = (x - x.mean(dim=[-1, -2], keepdim=True)) / (x.std() + 1.0e-5)
-        x = self.self_projection_a(x)[0]
-        x = self.self_projection_b(x)[0]
+        x = self.self_projection_a(x)
+        x = self.self_projection_b(x)
         return x
 
 

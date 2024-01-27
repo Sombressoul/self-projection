@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from self_projection import SelfProjection, SelfProjectionDev
+from modules.self_projection import SelfProjection
 
 
 class SimpleAutoencoderSPSP(nn.Module):
@@ -14,8 +14,6 @@ class SimpleAutoencoderSPSP(nn.Module):
     ):
         super(SimpleAutoencoderSPSP, self).__init__()
 
-        self.sp_class = SelfProjectionDev if dev else SelfProjection
-
         dim = input_size
         dims = [dim]
         for _ in range(network_depth):
@@ -25,7 +23,7 @@ class SimpleAutoencoderSPSP(nn.Module):
         encoder = nn.ModuleList()
         for depth_id in range(network_depth):
             encoder.append(
-                self.sp_class(
+                SelfProjection(
                     size_input=[dims[depth_id]] * 2,
                     size_projection=dims[depth_id + 1],
                     **sp_params,
@@ -38,7 +36,7 @@ class SimpleAutoencoderSPSP(nn.Module):
         decoder = nn.ModuleList()
         for depth_id in range(network_depth - 1, -1, -1):
             decoder.append(
-                self.sp_class(
+                SelfProjection(
                     size_input=[dims[depth_id + 1]] * 2,
                     size_projection=dims[depth_id],
                     **sp_params,

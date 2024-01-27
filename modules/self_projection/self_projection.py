@@ -1,54 +1,18 @@
 import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from typing import Union
 from collections.abc import Callable
 
-
-class ParametricTanh(nn.Module):
-    def __init__(
-        self,
-        gamma_min: float = +0.1,
-        gamma_max: float = +1.1,
-        std: float = 0.01,
-        use_beta: bool = True,
-    ) -> None:
-        super(ParametricTanh, self).__init__()
-
-        # The range [+0.1, +1.1] is enough for stability with enforcing of a non-linearity.
-        self.gamma_min = gamma_min
-        self.gamma_max = gamma_max
-
-        beta = torch.empty([1])
-        beta = torch.nn.init.normal_(beta, mean=0.0, std=std)
-        gamma = torch.empty([2])
-        gamma = torch.nn.init.normal_(gamma, mean=0.5, std=std)
-        self.beta = nn.Parameter(beta) if use_beta else 0.0
-        self.gamma = nn.Parameter(gamma)
-
-        self.register_parameter_constraint_hooks()
-        pass
-
-    def forward(
-        self,
-        x: torch.Tensor,
-    ) -> torch.Tensor:
-        return x * (1 - self.gamma[0]) + F.tanh(x) * self.gamma[1] + self.beta
-
-    def enforce_gamma_constraints(self) -> None:
-        with torch.no_grad():
-            self.gamma.clamp_(self.gamma_min, self.gamma_max)
-        pass
-
-    def register_parameter_constraint_hooks(self) -> None:
-        self.gamma.register_hook(lambda grad: self.enforce_gamma_constraints())
-        pass
+from modules.utils import ParametricTanh
+from modules.utils.functional import (
+    partial_norm,
+    standardize,
+)
 
 
-class SelfProjectionDev(nn.Module):
-    # Configurable params.
+class SelfProjection(nn.Module):
     size_input: Union[torch.Size, list[int]]
     size_projection: int
     depth: int
@@ -60,16 +24,6 @@ class SelfProjectionDev(nn.Module):
     eps: float
     delta: float
     pnorm_frac: float
-
-    # Trainable params.
-    mat_original_xj: nn.Parameter
-    mat_original_xi: nn.Parameter
-    mat_permuted_xj: nn.Parameter
-    mat_permuted_xi: nn.Parameter
-    mat_original_rel_xj: nn.Parameter
-    mat_original_rel_xi: nn.Parameter
-    mat_permuted_rel_xj: nn.Parameter
-    mat_permuted_rel_xi: nn.Parameter
 
     def __init__(
         self,
@@ -86,7 +40,7 @@ class SelfProjectionDev(nn.Module):
         pnorm_frac: float = 0.1,
         **kwargs,
     ) -> None:
-        super(SelfProjectionDev, self).__init__(**kwargs)
+        super(SelfProjection, self).__init__(**kwargs)
 
         # Initial checks.
         assert depth > 0, "The 'depth' argument must be a positive integer."
@@ -332,43 +286,6 @@ class SelfProjectionDev(nn.Module):
     ) -> torch.Tensor:
         return self.initializer(x)
 
-    def _partial_norm(
-        self,
-        x: torch.Tensor,
-    ) -> torch.Tensor:
-        sample_numel = x[0].numel()
-        partial_size = int(sample_numel * self.pnorm_frac)
-        partial_size = 1 if partial_size == 0 else partial_size
-        indices = torch.randint(0, sample_numel, [x.shape[0], partial_size])
-        indices = [indices[i].add_(sample_numel * i) for i in range(indices.shape[0])]
-        indices = torch.cat(indices, dim=0)
-        partial_x = x.reshape([-1])[indices].view([-1, partial_size])
-        # It is better to use .view() above, but that may cause memory access errors.
-        # I have to climb under the hood to fix this, but I don't want to. \/(o_O)\/
-        norm_x = partial_x.norm(p="fro", dim=-1, keepdim=True)
-        rms_x = norm_x * partial_size ** (-1.0 / 2)
-        rms_x = rms_x.view([-1] + [1] * (len(x.shape) - 1))
-        x = x / (rms_x + self.eps)
-        return x
-
-    def _standardize(
-        self,
-        x: torch.Tensor,
-    ) -> torch.Tensor:
-        x_mean = x.mean(dim=[-1, -2], keepdim=True)
-        x_std = x.std(dim=[-1, -2], keepdim=True)
-        return (x - x_mean) / (x_std + self.eps)
-
-    def _rescale(
-        self,
-        x: torch.Tensor,
-        dim: int = -1,
-    ) -> torch.Tensor:
-        x_min = x.min(dim=dim, keepdim=True).values - self.eps
-        x_max = x.max(dim=dim, keepdim=True).values + self.eps
-        x = (x - x_min) / (x_max - x_min)
-        return x
-
     def forward(
         self,
         x: torch.FloatTensor,
@@ -414,13 +331,21 @@ class SelfProjectionDev(nn.Module):
                 o_trans_xj_buf, "o_trans_xj_buf", depth
             )
             o_trans_xj_buf = self._activate(o_trans_xj_buf, "o_trans_xj_buf", depth)
-            o_trans_xj_buf = self._partial_norm(o_trans_xj_buf)
+            o_trans_xj_buf = partial_norm(
+                o_trans_xj_buf,
+                fraction=self.pnorm_frac,
+                eps=self.eps,
+            )
             o_trans_xi_buf = self.dropout(x).permute([0, -1, -2]) @ o_mat_xi
             o_trans_xi_buf = self._scale_and_bias(
                 o_trans_xi_buf, "o_trans_xi_buf", depth
             )
             o_trans_xi_buf = self._activate(o_trans_xi_buf, "o_trans_xi_buf", depth)
-            o_trans_xi_buf = self._partial_norm(o_trans_xi_buf)
+            o_trans_xi_buf = partial_norm(
+                o_trans_xi_buf,
+                fraction=self.pnorm_frac,
+                eps=self.eps,
+            )
 
             # Transform permuted matrices.
             p_trans_xj_buf = o_trans_xj_buf.permute([0, -1, -2]) @ p_mat_xj
@@ -428,14 +353,22 @@ class SelfProjectionDev(nn.Module):
                 p_trans_xj_buf, "p_trans_xj_buf", depth
             )
             p_trans_xj_buf = self._activate(p_trans_xj_buf, "p_trans_xj_buf", depth)
-            p_trans_xj_buf = self._partial_norm(p_trans_xj_buf)
+            p_trans_xj_buf = partial_norm(
+                p_trans_xj_buf,
+                fraction=self.pnorm_frac,
+                eps=self.eps,
+            )
             p_trans_xi_buf = o_trans_xi_buf.permute([0, -1, -2]) @ p_mat_xi
             p_trans_xi_buf = self._scale_and_bias(
                 p_trans_xi_buf, "p_trans_xi_buf", depth
             )
             p_trans_xi_buf = p_trans_xi_buf.permute([0, -1, -2])  # permute back
             p_trans_xi_buf = self._activate(p_trans_xi_buf, "p_trans_xi_buf", depth)
-            p_trans_xi_buf = self._partial_norm(p_trans_xi_buf)
+            p_trans_xi_buf = partial_norm(
+                p_trans_xi_buf,
+                fraction=self.pnorm_frac,
+                eps=self.eps,
+            )
 
             # Compute permuted relation matrices.
             p_rel_xj_buf = p_trans_xj_buf @ p_mat_rel_xj
@@ -458,9 +391,17 @@ class SelfProjectionDev(nn.Module):
 
             # Rescale permuted matrices.
             xj_buf = p_trans_xj_buf * f_scale_j.unsqueeze(-1)
-            xj_buf = self._partial_norm(xj_buf)
+            xj_buf = partial_norm(
+                xj_buf,
+                fraction=self.pnorm_frac,
+                eps=self.eps,
+            )
             xi_buf = p_trans_xi_buf * f_scale_i.unsqueeze(-1)
-            xi_buf = self._partial_norm(xi_buf)
+            xi_buf = partial_norm(
+                xi_buf,
+                fraction=self.pnorm_frac,
+                eps=self.eps,
+            )
 
             if torch.isnan(xj_buf).any() or torch.isnan(xi_buf).any():
                 raise ValueError("NaN in projection matrix.")
@@ -473,14 +414,14 @@ class SelfProjectionDev(nn.Module):
             x_buf = self._activate(x_buf, "x_buf", depth)
 
             if self.preserve_distribution:
-                x_buf = self._standardize(x_buf)
+                x_buf = standardize(x_buf, eps=self.eps)
                 x_buf = (
                     (x_buf * x_origin_std) + x_origin_mean
                     if self.preserve_distribution
                     else x_buf
                 )
             elif self.standardize_output:
-                x_buf = self._standardize(x_buf)
+                x_buf = standardize(x_buf, eps=self.eps)
 
             # Scale down in accordance to overall depth.
             x_buf = x_buf * (1.0 / self.depth)

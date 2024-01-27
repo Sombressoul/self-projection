@@ -1,4 +1,5 @@
 import os
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,7 +10,14 @@ import matplotlib.pyplot as plt
 
 from PIL import Image, ImageDraw, ImageFont
 
-from models import (
+# ================================================================================= #
+# ____________________________> Module imports.
+# ================================================================================= #
+# Add parent dir to path to enable imports from the module.
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(script_dir))
+
+from modules.models import (
     SimpleAutoencoderSPSP,
     SimpleAutoencoderSPSingle,
     AutoencoderCNNSP,
@@ -22,11 +30,12 @@ from models import (
 torch.manual_seed(1)
 
 # Data:
-images_path = "data/ae_test_5k_2_1"
+images_path = "data/autoencoder_cnnsp"
+training_log_path = "models/train"
 
 # Training:
-epochs = 1000
-batch_size = 16
+epochs = 100
+batch_size = 32
 
 # Model:
 model_class = AutoencoderCNNSP
@@ -35,16 +44,16 @@ debug_model = False
 
 # Class dependent:
 AutoencoderCNNSP_scale_factor = 8
-AutoencoderCNNSP_channels_base = 32
-AutoencoderCNNSP_extractor_depth = 2
-AutoencoderCNNSP_compressor_depth = 2
+AutoencoderCNNSP_channels_base = 16
+AutoencoderCNNSP_extractor_depth = 1
+AutoencoderCNNSP_compressor_depth = 1
 AutoencoderCNNSP_use_extractor = True
 AutoencoderCNNSP_use_compressor = True
 AutoencoderCNNSP_baseline = False
-AutoencoderCNNSP_dropout_rate = 0.1
+AutoencoderCNNSP_dropout_rate = 0.05
 
 # Optimization:
-warmup_steps = 768
+warmup_steps = 256
 learning_rate_start = 1.0e-9
 learning_rate_end = 1.5e-4
 weight_decay = 1.0e-2
@@ -56,8 +65,8 @@ clip_grad_norm_max = 1.0
 clip_grad_norm_type = 2.0  # L2
 use_clip_grad_n_sched = True
 clip_grad_n_sched_min = 1.0e-3
-clip_grad_n_sched_max = 1.0
-clip_grad_n_sched_steps = 1024
+clip_grad_n_sched_max = 1.5
+clip_grad_n_sched_steps = 256
 clip_grad_n_sched_type = 2.0
 
 # Logging/Plotting:
@@ -70,11 +79,11 @@ plot_results = False
 dtype = torch.bfloat16
 save_model = True
 save_model_nth_epoch = 10
-load_from_checkpoint = False
-checkpoint_path = "temp/AutoencoderCNNSP_01.pt"
+load_from_checkpoint = True
+checkpoint_path = "models/train"
+checkpoint_name = "AutoencoderCNNSP_epoch_40"
 
 # SelfProjection:
-dev_mode = True
 sp_params = dict(
     depth=1,
     preserve_distribution=False,
@@ -120,11 +129,12 @@ def train(
 
             if save_image_nth_batch > 0 and batch_idx % save_image_nth_batch == 0:
                 log_image(
-                    name=f"epoch_{str(epoch)}_batch_{str(batch_idx)}",
+                    name=f"{model.__class__.__name__}_epoch_{str(epoch)}_batch_{str(batch_idx)}",
                     image_target=targets[0],
                     image_output=outputs[0],
                     latents=latents[0],
                     loss=running_loss / (i + batch_size),
+                    path=training_log_path,
                 )
 
             assert (
@@ -167,7 +177,7 @@ def train(
                         clip_grad_n_sched_max - clip_grad_n_sched_min
                     ) / clip_grad_n_sched_steps
                     clip_grad_n_sched_val = clip_grad_n_sched_min
-                
+
                 nn.utils.clip_grad_norm_(
                     parameters=model.parameters(),
                     max_norm=clip_grad_n_sched_val,
@@ -184,15 +194,22 @@ def train(
 
         if save_image_nth_epoch > 0 and epoch % save_image_nth_epoch == 0:
             log_image(
-                name=f"epoch_{str(epoch)}",
+                name=f"{model.__class__.__name__}_epoch_{str(epoch)}",
                 image_target=targets[0],
                 image_output=outputs[0],
                 latents=latents[0],
                 loss=running_loss,
+                path=training_log_path,
             )
 
         if save_model and epoch % save_model_nth_epoch == 0:
-            torch.save(model.state_dict(), f"temp/model_epoch_{str(epoch)}.pth")
+            model_save(
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                path=checkpoint_path,
+                name=f"{model.__class__.__name__}_epoch_{str(epoch)}",
+            )
 
     if plot_results:
         plt.plot(loss_data)
@@ -205,6 +222,7 @@ def log_image(
     image_output: torch.Tensor,
     latents: torch.Tensor,
     loss: float,
+    path: str,
 ) -> None:
     size = [image_target.shape[-2], image_target.shape[-1]]
 
@@ -218,7 +236,7 @@ def log_image(
 
     text = f"Loss: {loss:.4f}"
     combined_image = add_text_to_image(combined_image, text)
-    combined_image.save(f"temp/{str(name)}.png")
+    combined_image.save(f"{path}/{str(name)}.png")
 
     pass
 
@@ -259,12 +277,30 @@ def add_text_to_image(
     return image
 
 
-def load_model(
+def model_load(
     model: nn.Module,
-    model_path: str,
-) -> nn.Module:
-    model.load_state_dict(torch.load(model_path))
-    return model
+    optimizer: torch.optim.Optimizer,
+    scheduler: optim.lr_scheduler.LRScheduler,
+    path: str,
+    name: str,
+) -> tuple[nn.Module, torch.optim.Optimizer, optim.lr_scheduler.LRScheduler]:
+    model.load_state_dict(torch.load(os.path.join(path, f"{name}.pt")))
+    optimizer.load_state_dict(torch.load(os.path.join(path, f"{name}.opt.pt")))
+    scheduler.load_state_dict(torch.load(os.path.join(path, f"{name}.sch.pt")))
+    return model, optimizer, scheduler
+
+
+def model_save(
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: optim.lr_scheduler.LRScheduler,
+    path: str,
+    name: str,
+) -> None:
+    torch.save(model.state_dict(), os.path.join(path, f"{name}.pt"))
+    torch.save(optimizer.state_dict(), os.path.join(path, f"{name}.opt.pt"))
+    torch.save(scheduler.state_dict(), os.path.join(path, f"{name}.sch.pt"))
+    pass
 
 
 def get_trainable_params_cnt(
@@ -290,7 +326,6 @@ if __name__ == "__main__":
             SimpleAutoencoderSPSP(
                 input_size=tensor_images.shape[1],
                 network_depth=model_nn_depth,
-                dev=dev_mode,
                 sp_params=sp_params,
             )
             .to(dtype)
@@ -300,7 +335,6 @@ if __name__ == "__main__":
         model = (
             SimpleAutoencoderSPSingle(
                 input_size=tensor_images.shape[1],
-                dev=dev_mode,
                 sp_params=sp_params,
             )
             .to(dtype)
@@ -319,7 +353,6 @@ if __name__ == "__main__":
                 use_compressor=AutoencoderCNNSP_use_compressor,
                 baseline=AutoencoderCNNSP_baseline,
                 dropout_rate=AutoencoderCNNSP_dropout_rate,
-                dev=dev_mode,
                 sp_params=sp_params,
             )
             .to(dtype)
@@ -335,10 +368,6 @@ if __name__ == "__main__":
         print(f"Total number of trainable parameters: {model_params}")
         print(model)
         exit()
-
-    if load_from_checkpoint:
-        model = load_model(model, checkpoint_path)
-        model = model.to(dtype).to("cuda")
 
     optimizer = optim.AdamW(
         model.parameters(),
@@ -366,6 +395,16 @@ if __name__ == "__main__":
         milestones=[warmup_steps],
     )
 
+    if load_from_checkpoint:
+        model, optimizer, scheduler = model_load(
+            model=model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            path=checkpoint_path,
+            name=checkpoint_name,
+        )
+        model = model.to(dtype).to("cuda")
+
     train(
         model=model,
         optimizer=optimizer,
@@ -377,4 +416,10 @@ if __name__ == "__main__":
     )
 
     if save_model:
-        torch.save(model.state_dict(), "temp/model_autoencoder.pt")
+        model_save(
+            model=model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            path=checkpoint_path,
+            name=f"{model.__class__.__name__}_trained",
+        )
