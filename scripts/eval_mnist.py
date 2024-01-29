@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import StepLR
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(script_dir))
 
-from modules.self_projection import SelfProjection
+from self_projection import SelfProjection
 
 
 class Net(nn.Module):

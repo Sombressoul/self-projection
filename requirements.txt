@@ -3,3 +3,4 @@ numpy==1.24.1
 matplotlib==3.8.2
 pillow==10.2
 madgrad==1.3
+prodigyopt==1.0

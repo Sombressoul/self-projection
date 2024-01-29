@@ -12,11 +12,11 @@ from torch.optim.lr_scheduler import StepLR
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(script_dir))
 
-from modules.self_projection import SelfProjection
+from self_projection import SelfProjection
 
 # Experimental model.
 #
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=-1 --sp-depth=4
+# python scripts/eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=-1 --sp-depth=4
 class ExperimentalModel(nn.Module):
     def __init__(
         self,
@@ -49,10 +49,10 @@ class ExperimentalModel(nn.Module):
 # Model for evaluation: SelfProjection
 #
 # SelfProjection depth -> 1
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=1
+# python scripts/eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=1
 #
 # SelfProjection depth -> 4
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=4
+# python scripts/eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=0 --sp-depth=4
 class NetSP(nn.Module):
     def __init__(
         self,
@@ -83,7 +83,7 @@ class NetSP(nn.Module):
 
 
 # Model for evaluation: reference
-# python eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=1
+# python scripts/eval_cifar100.py --seed=1 --batch-size=64 --epochs=10 --lr=0.001 --wd=0.00001 --gamma=1.0 --model=1
 class NetCNN(nn.Module):
     def __init__(
         self,

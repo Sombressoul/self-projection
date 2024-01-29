@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(script_dir))
 
-from modules.models import (
+from self_projection.models import (
     SimpleAutoencoderSPSP,
     SimpleAutoencoderSPSingle,
     AutoencoderCNNSP,
@@ -79,7 +79,7 @@ plot_results = False
 dtype = torch.bfloat16
 save_model = True
 save_model_nth_epoch = 10
-load_from_checkpoint = True
+load_from_checkpoint = False
 checkpoint_path = "models/train"
 checkpoint_name = "AutoencoderCNNSP_epoch_40"
 

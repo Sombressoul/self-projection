@@ -8,8 +8,8 @@ import torch.nn.functional as F
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(script_dir))
 
-from modules.self_projection import SelfProjection
-from modules.utils.functional import plot_loss as _plot_loss
+from self_projection import SelfProjection
+from self_projection.utils.functional import plot_loss as _plot_loss
 
 # seeding
 torch.manual_seed(1)

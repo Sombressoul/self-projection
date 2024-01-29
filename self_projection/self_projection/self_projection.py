@@ -5,8 +5,8 @@ import torch.nn as nn
 from typing import Union
 from collections.abc import Callable
 
-from modules.utils import ParametricTanh
-from modules.utils.functional import (
+from self_projection.utils import ParametricTanh
+from self_projection.utils.functional import (
     partial_norm,
     standardize,
 )

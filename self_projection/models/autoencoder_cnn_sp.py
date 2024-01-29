@@ -2,8 +2,8 @@ import math
 import torch
 import torch.nn as nn
 
-from modules.self_projection import SelfProjection
-from modules.utils import Checkerboard
+from self_projection.self_projection import SelfProjection
+from self_projection.utils import Checkerboard
 
 
 class AutoencoderCNNSP(nn.Module):
