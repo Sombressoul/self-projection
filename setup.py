@@ -3,7 +3,7 @@ from distutils.core import setup
 
 from pathlib import Path
 
-__VERSION__ = "0.2.1"
+__VERSION__ = "0.2.2"
 
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
@@ -13,7 +13,7 @@ setup(
     version=__VERSION__,
     description="SelfProjection is a PyTorch-based neural network layer designed to transform and project high-dimensional data.",
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     author="Konstantin Bashinskiy",
     author_email="sombressoul@gmail.com",
     keywords=["machine learning", "deep learning", "pytorch layers", "pytorch modules"],
@@ -27,7 +27,13 @@ setup(
     ],
     url="https://github.com/Sombressoul/self-projection",
     license="Apache",
-    packages=["self_projection"],
+    packages=[
+        "self_projection",
+        "self_projection.models",
+        "self_projection.self_projection",
+        "self_projection.utils",
+        "self_projection.utils.functional",
+    ],
     install_requires=[
         "torch>=2.0.0",
     ],
